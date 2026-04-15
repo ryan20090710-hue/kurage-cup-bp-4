@@ -328,13 +328,17 @@ function HomePage({ onNavigate }) {
 
   useEffect(() => { positionsRef.current = positions; }, [positions]);
 
-  // ── 儲存位置到 Firebase ──
-  const savePositions = (pos) => {
-    setFbPositions(pos);
-  };
+  // ── 手機偵測 resize 監聽 ──
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
-  // ── 拖曳開始（mouse） ──
-  const onDragStart = (e, id) => {
+  // ── 全部改成 function 宣告，避免 Terser/esbuild TDZ 問題 ──
+  function savePositions(pos) { setFbPositions(pos); }
+
+  function onDragStart(e, id) {
     if (!editMode) return;
     e.preventDefault();
     e.stopPropagation();
@@ -343,14 +347,12 @@ function HomePage({ onNavigate }) {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const curPos  = positionsRef.current[id];
-    // 計算滑鼠相對於元素中心的偏移 (以百分比表示)
     const elemX = rect.left + (curPos.x / 100) * rect.width;
     const elemY = rect.top  + (curPos.y / 100) * rect.height;
     offsetRef.current = { x: clientX - elemX, y: clientY - elemY };
-  };
+  }
 
-  // ── 拖曳移動 ──
-  const onMouseMove = (e) => {
+  function onMouseMove(e) {
     if (!draggingRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -361,60 +363,49 @@ function HomePage({ onNavigate }) {
     const y = Math.min(95, Math.max(5, rawY));
     const newPos = { ...positionsRef.current, [draggingRef.current]: { x, y } };
     setPositions(newPos);
-  };
+  }
 
-  // ── 拖曳結束 ──
-  const onMouseUp = () => {
+  function onMouseUp() {
     if (draggingRef.current) {
       savePositions(positionsRef.current);
       draggingRef.current = null;
     }
-  };
+  }
 
-  // ── 設定面板 ──
-  const openSettings = () => setGateTarget('settings');
-  const openSettingsAfterAuth = () => { setDraft(JSON.parse(JSON.stringify(config))); setSettingsOpen(true); };
-  const saveSettings = () => {
-    setConfig(draft); // 直接寫入 Firebase，所有裝置即時同步
-    setSettingsOpen(false);
-  };
-  const resetAll = () => {
+  function openSettings() { setGateTarget('settings'); }
+  function openSettingsAfterAuth() { setDraft(JSON.parse(JSON.stringify(config))); setSettingsOpen(true); }
+  function saveSettings() { setConfig(draft); setSettingsOpen(false); }
+  function resetAll() {
     setDraft(JSON.parse(JSON.stringify(LOBBY_DEFAULT)));
     setConfig(LOBBY_DEFAULT);
     setFbPositions(DEFAULT_POSITIONS);
     setPositions({ ...DEFAULT_POSITIONS });
-  };
-
-  const moveButton = (idx, dir) => {
+  }
+  function moveButton(idx, dir) {
     const btns = [...draft.buttons];
     const target = idx + dir;
     if (target < 0 || target >= btns.length) return;
     [btns[idx], btns[target]] = [btns[target], btns[idx]];
     btns.forEach((b, i) => (b.order = i));
     setDraft({ ...draft, buttons: btns });
-  };
-
-  // ── 手機偵測 resize 監聽 ──
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+  }
 
   const bgStyle = config.bgType === 'image' && config.bgValue.startsWith('http')
     ? { backgroundImage: `url(${config.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundColor: config.bgValue };
 
   // ── 拖曳元素的共用 wrapper 樣式（桌機用） ──
-  const draggableStyle = (id) => ({
-    position: 'absolute',
-    left: `${positions[id]?.x ?? DEFAULT_POSITIONS[id].x}%`,
-    top:  `${positions[id]?.y ?? DEFAULT_POSITIONS[id].y}%`,
-    transform: 'translate(-50%, -50%)',
-    cursor: editMode ? 'grab' : 'default',
-    userSelect: 'none',
-    zIndex: 10,
-  });
+  function draggableStyle(id) {
+    return {
+      position: 'absolute',
+      left: `${positions[id]?.x ?? DEFAULT_POSITIONS[id].x}%`,
+      top:  `${positions[id]?.y ?? DEFAULT_POSITIONS[id].y}%`,
+      transform: 'translate(-50%, -50%)',
+      cursor: editMode ? 'grab' : 'default',
+      userSelect: 'none',
+      zIndex: 10,
+    };
+  }
 
   const editRing = editMode ? 'ring-2 ring-dashed ring-yellow-400/70 rounded-2xl p-1' : '';
 
