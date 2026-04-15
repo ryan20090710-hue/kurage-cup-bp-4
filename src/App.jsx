@@ -298,11 +298,11 @@ const DEFAULT_POSITIONS = {
   viewer:      { x: 80, y: 62 },
 };
 
-const BUTTON_ICONS = {
-  multiplayer: Users,
-  operator:    Settings,
-  viewer:      MonitorPlay,
-};
+function getButtonIcon(id) {
+  if (id === 'multiplayer') return Users;
+  if (id === 'operator') return Settings;
+  return MonitorPlay;
+}
 
 
 function HomePage({ onNavigate }) {
@@ -453,7 +453,7 @@ function HomePage({ onNavigate }) {
           {/* 按鈕列：垂直堆疊，橫向排列 icon + 文字 */}
           <div className="w-full max-w-xs flex flex-col gap-3">
             {sortedButtons.map(btn => {
-              const Icon = BUTTON_ICONS[btn.id];
+              const Icon = getButtonIcon(btn.id);
               return (
                 <button
                   key={btn.id}
@@ -541,7 +541,7 @@ function HomePage({ onNavigate }) {
                   <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字</label>
                   <div className="space-y-3">
                     {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                      const Icon = BUTTON_ICONS[btn.id];
+                      const Icon = getButtonIcon(btn.id);
                       return (
                         <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
                           <div className="flex items-center gap-2">
@@ -618,7 +618,7 @@ function HomePage({ onNavigate }) {
 
       {/* ── 三個按鈕（各自可拖曳） ── */}
       {config.buttons.map(btn => {
-        const Icon = BUTTON_ICONS[btn.id];
+        const Icon = getButtonIcon(btn.id);
         return (
           <div
             key={btn.id}
@@ -749,7 +749,7 @@ function HomePage({ onNavigate }) {
                 <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字設定</label>
                 <div className="space-y-3">
                   {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                    const Icon = BUTTON_ICONS[btn.id];
+                    const Icon = getButtonIcon(btn.id);
                     return (
                       <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
                         <div className="flex items-center gap-2 mb-1">
@@ -905,14 +905,16 @@ function getPortrait(brawler) {
   return `/portraits/${id}_portrait.png`;
 }
 
-const UltraLegendarySparkle = () => (
-  <div className="absolute inset-0 pointer-events-none">
-    <div className="absolute top-1 left-1 animate-ping bg-white w-1 h-1 rounded-full opacity-70"></div>
-    <div className="absolute bottom-2 right-2 animate-pulse bg-pink-200 w-1.5 h-1.5 rounded-full opacity-80"></div>
-  </div>
-);
+function UltraLegendarySparkle() {
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute top-1 left-1 animate-ping bg-white w-1 h-1 rounded-full opacity-70"></div>
+      <div className="absolute bottom-2 right-2 animate-pulse bg-pink-200 w-1.5 h-1.5 rounded-full opacity-80"></div>
+    </div>
+  );
+}
 
-const BanSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isHidden, lang }) => {
+function BanSlot({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isHidden, lang }) {
   const displayBrawler = brawler || (isPreview ? selectedBrawler : null);
   const displayName = getBrawlerName(displayBrawler, lang);
   const shortName = lang === 'zh' ? displayName.substring(0, 2) : displayName.substring(0, 3).toUpperCase();
@@ -943,9 +945,9 @@ const BanSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isH
       ) : <ShieldX className="text-slate-700 opacity-50" size={20} />}
     </div>
   );
-};
+}
 
-const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, lang, t }) => {
+function PickSlot({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, lang, t }) {
   const displayBrawler = brawler || (isPreview ? selectedBrawler : null);
   const displayName = getBrawlerName(displayBrawler, lang);
   const portrait = getPortrait(displayBrawler);
@@ -964,13 +966,11 @@ const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, la
       {displayBrawler && (
         <div className={`absolute inset-0 flex flex-col items-center justify-center ${RARITY_BG[displayBrawler.rarity]} ${isPreview ? 'opacity-70 saturate-50' : 'opacity-100'}`}>
           {displayBrawler.rarity === 'ultra_legendary' && <UltraLegendarySparkle />}
-          {/* 頭貼背景大圖 */}
           {portrait && (
             <img src={portrait} alt={displayName}
               className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
             />
           )}
-          {/* 底部名字條 */}
           <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm py-1 px-2 z-10 text-center">
             <span className={`font-black drop-shadow-md ${lang === 'en' ? 'text-xs lg:text-sm' : 'text-xs lg:text-base'} text-white`}>{displayName}</span>
             <div className="text-[9px] lg:text-[10px] font-bold uppercase tracking-widest opacity-70 text-white">
@@ -981,7 +981,7 @@ const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, la
       )}
     </div>
   );
-};
+}
 
 // ── 拋硬幣動畫元件（純渲染，無 hooks）──────────────────────────────────────
 function CoinFlipOverlay({ coinWinner, stage, t }) {
