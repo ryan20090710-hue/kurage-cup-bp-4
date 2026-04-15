@@ -107,12 +107,12 @@ function useFirebaseState(key, initialValue) {
     });
     return () => unsubscribe();
   }, [key]);
-  const setSharedState = (value) => {
+  // 不使用 state 閉包，避免 esbuild TDZ 錯誤
+  function setSharedState(value) {
     try {
-      const valueToStore = value instanceof Function ? value(state) : value;
-      set(ref(realtimeDb, key), valueToStore);
+      set(ref(realtimeDb, key), value);
     } catch (error) { console.error('Firebase update error:', error); }
-  };
+  }
   return [state, setSharedState];
 }
 
@@ -298,41 +298,47 @@ const DEFAULT_POSITIONS = {
   viewer:      { x: 80, y: 62 },
 };
 
-const BUTTON_ICONS = {
-  multiplayer: Users,
-  operator:    Settings,
-  viewer:      MonitorPlay,
-};
+function getButtonIcon(id) {
+  if (id === 'multiplayer') return Users;
+  if (id === 'operator') return Settings;
+  return MonitorPlay;
+}
 
 
 function HomePage({ onNavigate }) {
-  const [config, setConfig]       = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
+  const [config, setConfig]           = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
   const [fbPositions, setFbPositions] = useFirebaseState('brawl_lobby_positions', DEFAULT_POSITIONS);
-  const [positions, setPositions] = useState(fbPositions); // 本地拖曳用，拖完才同步
-  const [editMode, setEditMode]   = useState(false);
+  const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
+  const [editMode, setEditMode]       = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [draft, setDraft]         = useState(null);
-  const [gateTarget, setGateTarget] = useState(null);
+  const [draft, setDraft]             = useState(null);
+  const [gateTarget, setGateTarget]   = useState(null);
+  const [isMobile, setIsMobile]       = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  // ── 拖曳狀態（useRef 必須在 useEffect 之前宣告）──
+  const draggingRef   = useRef(null);
+  const offsetRef     = useRef({ x: 0, y: 0 });
+  const containerRef  = useRef(null);
+  const positionsRef  = useRef(positions);
 
   // 當 Firebase 位置更新時，同步到本地（只在非拖曳狀態下更新）
   useEffect(() => {
     if (!draggingRef.current) setPositions(fbPositions);
-  }, [fbPositions]); // 'settings' | 'operator' | null
+  }, [fbPositions]);
 
-  // ── 拖曳狀態 ──
-  const draggingRef   = useRef(null); // 正在拖曳的元素 id
-  const offsetRef     = useRef({ x: 0, y: 0 });
-  const containerRef  = useRef(null);
-  const positionsRef  = useRef(positions);
   useEffect(() => { positionsRef.current = positions; }, [positions]);
 
-  // ── 儲存位置到 Firebase ──
-  const savePositions = (pos) => {
-    setFbPositions(pos);
-  };
+  // ── 手機偵測 resize 監聽 ──
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
-  // ── 拖曳開始（mouse） ──
-  const onDragStart = (e, id) => {
+  // ── 全部改成 function 宣告，避免 Terser/esbuild TDZ 問題 ──
+  function savePositions(pos) { setFbPositions(pos); }
+
+  function onDragStart(e, id) {
     if (!editMode) return;
     e.preventDefault();
     e.stopPropagation();
@@ -341,14 +347,12 @@ function HomePage({ onNavigate }) {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const curPos  = positionsRef.current[id];
-    // 計算滑鼠相對於元素中心的偏移 (以百分比表示)
     const elemX = rect.left + (curPos.x / 100) * rect.width;
     const elemY = rect.top  + (curPos.y / 100) * rect.height;
     offsetRef.current = { x: clientX - elemX, y: clientY - elemY };
-  };
+  }
 
-  // ── 拖曳移動 ──
-  const onMouseMove = (e) => {
+  function onMouseMove(e) {
     if (!draggingRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -359,61 +363,49 @@ function HomePage({ onNavigate }) {
     const y = Math.min(95, Math.max(5, rawY));
     const newPos = { ...positionsRef.current, [draggingRef.current]: { x, y } };
     setPositions(newPos);
-  };
+  }
 
-  // ── 拖曳結束 ──
-  const onMouseUp = () => {
+  function onMouseUp() {
     if (draggingRef.current) {
       savePositions(positionsRef.current);
       draggingRef.current = null;
     }
-  };
+  }
 
-  // ── 設定面板 ──
-  const openSettings = () => setGateTarget('settings');
-  const openSettingsAfterAuth = () => { setDraft(JSON.parse(JSON.stringify(config))); setSettingsOpen(true); };
-  const saveSettings = () => {
-    setConfig(draft); // 直接寫入 Firebase，所有裝置即時同步
-    setSettingsOpen(false);
-  };
-  const resetAll = () => {
+  function openSettings() { setGateTarget('settings'); }
+  function openSettingsAfterAuth() { setDraft(JSON.parse(JSON.stringify(config))); setSettingsOpen(true); }
+  function saveSettings() { setConfig(draft); setSettingsOpen(false); }
+  function resetAll() {
     setDraft(JSON.parse(JSON.stringify(LOBBY_DEFAULT)));
     setConfig(LOBBY_DEFAULT);
     setFbPositions(DEFAULT_POSITIONS);
     setPositions({ ...DEFAULT_POSITIONS });
-  };
-
-  const moveButton = (idx, dir) => {
+  }
+  function moveButton(idx, dir) {
     const btns = [...draft.buttons];
     const target = idx + dir;
     if (target < 0 || target >= btns.length) return;
     [btns[idx], btns[target]] = [btns[target], btns[idx]];
     btns.forEach((b, i) => (b.order = i));
     setDraft({ ...draft, buttons: btns });
-  };
-
-  // ── 手機偵測 ──
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+  }
 
   const bgStyle = config.bgType === 'image' && config.bgValue.startsWith('http')
     ? { backgroundImage: `url(${config.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundColor: config.bgValue };
 
   // ── 拖曳元素的共用 wrapper 樣式（桌機用） ──
-  const draggableStyle = (id) => ({
-    position: 'absolute',
-    left: `${positions[id]?.x ?? DEFAULT_POSITIONS[id].x}%`,
-    top:  `${positions[id]?.y ?? DEFAULT_POSITIONS[id].y}%`,
-    transform: 'translate(-50%, -50%)',
-    cursor: editMode ? 'grab' : 'default',
-    userSelect: 'none',
-    zIndex: 10,
-  });
+  function draggableStyle(id) {
+    return {
+      position: 'absolute',
+      left: `${positions[id]?.x ?? DEFAULT_POSITIONS[id].x}%`,
+      top:  `${positions[id]?.y ?? DEFAULT_POSITIONS[id].y}%`,
+      transform: 'translate(-50%, -50%)',
+      cursor: editMode ? 'grab' : 'default',
+      userSelect: 'none',
+      zIndex: 10,
+    };
+  }
 
   const editRing = editMode ? 'ring-2 ring-dashed ring-yellow-400/70 rounded-2xl p-1' : '';
 
@@ -453,7 +445,7 @@ function HomePage({ onNavigate }) {
           {/* 按鈕列：垂直堆疊，橫向排列 icon + 文字 */}
           <div className="w-full max-w-xs flex flex-col gap-3">
             {sortedButtons.map(btn => {
-              const Icon = BUTTON_ICONS[btn.id];
+              const Icon = getButtonIcon(btn.id);
               return (
                 <button
                   key={btn.id}
@@ -541,7 +533,7 @@ function HomePage({ onNavigate }) {
                   <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字</label>
                   <div className="space-y-3">
                     {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                      const Icon = BUTTON_ICONS[btn.id];
+                      const Icon = getButtonIcon(btn.id);
                       return (
                         <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
                           <div className="flex items-center gap-2">
@@ -618,7 +610,7 @@ function HomePage({ onNavigate }) {
 
       {/* ── 三個按鈕（各自可拖曳） ── */}
       {config.buttons.map(btn => {
-        const Icon = BUTTON_ICONS[btn.id];
+        const Icon = getButtonIcon(btn.id);
         return (
           <div
             key={btn.id}
@@ -749,7 +741,7 @@ function HomePage({ onNavigate }) {
                 <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字設定</label>
                 <div className="space-y-3">
                   {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                    const Icon = BUTTON_ICONS[btn.id];
+                    const Icon = getButtonIcon(btn.id);
                     return (
                       <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
                         <div className="flex items-center gap-2 mb-1">
@@ -819,7 +811,7 @@ function HomePage({ onNavigate }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // 動態產生 pick 順序：先手隊伍先選
-const makePickSequence = (firstTeam) => {
+function makePickSequence(firstTeam) {
   const second = firstTeam === 'blue' ? 'red' : 'blue';
   return [
     { team: firstTeam, step: 1 },
@@ -829,9 +821,7 @@ const makePickSequence = (firstTeam) => {
     { team: firstTeam, step: 3 },
     { team: second,    step: 3 },
   ];
-};
-// 預設（硬幣結果出來前的 fallback）
-const PICK_SEQUENCE = makePickSequence('blue');
+}
 
 const INITIAL_DRAFT_STATE = {
   phase: 'waiting',   // waiting → coinflip → ban → pick → done
@@ -892,29 +882,31 @@ const translations = {
   }
 };
 
-const getBrawlerName = (brawler, lang) => {
+function getBrawlerName(brawler, lang) {
   if (!brawler) return '';
   if (lang === 'zh') return brawler.name;
   const exceptions = { '8bit': '8-Bit', 'el_primo': 'El Primo', 'mrp': 'Mr. P', 'larry_lawrie': 'Larry & Lawrie', 'rt': 'R-T', 'Jaeyoug': 'Jae-Yong' };
   if (exceptions[brawler.id]) return exceptions[brawler.id];
   return brawler.id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-};
+}
 
 // 頭貼路徑：圖片放在 public/portraits/ 資料夾
-const getPortrait = (brawler) => {
+function getPortrait(brawler) {
   if (!brawler) return null;
   const id = brawler.id.toLowerCase();
   return `/portraits/${id}_portrait.png`;
-};
+}
 
-const UltraLegendarySparkle = () => (
-  <div className="absolute inset-0 pointer-events-none">
-    <div className="absolute top-1 left-1 animate-ping bg-white w-1 h-1 rounded-full opacity-70"></div>
-    <div className="absolute bottom-2 right-2 animate-pulse bg-pink-200 w-1.5 h-1.5 rounded-full opacity-80"></div>
-  </div>
-);
+function UltraLegendarySparkle() {
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute top-1 left-1 animate-ping bg-white w-1 h-1 rounded-full opacity-70"></div>
+      <div className="absolute bottom-2 right-2 animate-pulse bg-pink-200 w-1.5 h-1.5 rounded-full opacity-80"></div>
+    </div>
+  );
+}
 
-const BanSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isHidden, lang }) => {
+function BanSlot({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isHidden, lang }) {
   const displayBrawler = brawler || (isPreview ? selectedBrawler : null);
   const displayName = getBrawlerName(displayBrawler, lang);
   const shortName = lang === 'zh' ? displayName.substring(0, 2) : displayName.substring(0, 3).toUpperCase();
@@ -945,9 +937,9 @@ const BanSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, isH
       ) : <ShieldX className="text-slate-700 opacity-50" size={20} />}
     </div>
   );
-};
+}
 
-const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, lang, t }) => {
+function PickSlot({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, lang, t }) {
   const displayBrawler = brawler || (isPreview ? selectedBrawler : null);
   const displayName = getBrawlerName(displayBrawler, lang);
   const portrait = getPortrait(displayBrawler);
@@ -966,13 +958,11 @@ const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, la
       {displayBrawler && (
         <div className={`absolute inset-0 flex flex-col items-center justify-center ${RARITY_BG[displayBrawler.rarity]} ${isPreview ? 'opacity-70 saturate-50' : 'opacity-100'}`}>
           {displayBrawler.rarity === 'ultra_legendary' && <UltraLegendarySparkle />}
-          {/* 頭貼背景大圖 */}
           {portrait && (
             <img src={portrait} alt={displayName}
               className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
             />
           )}
-          {/* 底部名字條 */}
           <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm py-1 px-2 z-10 text-center">
             <span className={`font-black drop-shadow-md ${lang === 'en' ? 'text-xs lg:text-sm' : 'text-xs lg:text-base'} text-white`}>{displayName}</span>
             <div className="text-[9px] lg:text-[10px] font-bold uppercase tracking-widest opacity-70 text-white">
@@ -983,21 +973,11 @@ const PickSlot = ({ brawler, isCurrentTurn, isPreview, selectedBrawler, team, la
       )}
     </div>
   );
-};
+}
 
-// ── 拋硬幣動畫元件（一面藍一面紅）──────────────────────────────────────────
-function CoinFlipOverlay({ coinWinner, t }) {
-  const [stage, setStage] = useState('spinning'); // spinning → result
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setStage('result'), 3200);
-    return () => clearTimeout(t1);
-  }, []);
-
-  // 藍贏 → 正面朝上 = 0deg（偶數圈）
-  // 紅贏 → 背面朝上 = 180deg（奇數半圈）
-  const finalDeg = coinWinner === 'blue' ? 1440 : 1620; // 4圈 or 4.5圈
-
+// ── 拋硬幣動畫元件（純渲染，無 hooks）──────────────────────────────────────
+function CoinFlipOverlay({ coinWinner, stage, t }) {
+  const finalDeg = coinWinner === 'blue' ? 1440 : 1620;
   return (
     <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md rounded-3xl flex items-center justify-center flex-col gap-8">
       <style>{`
@@ -1005,104 +985,52 @@ function CoinFlipOverlay({ coinWinner, t }) {
           0%   { transform: rotateY(0deg); }
           100% { transform: rotateY(${finalDeg}deg); }
         }
-        .coin-flip-anim {
-          animation: coinFlip 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-          transform-style: preserve-3d;
-        }
-        .coin-static {
-          transform: rotateY(${finalDeg}deg);
-          transform-style: preserve-3d;
-        }
-        .face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-        .face-back { transform: rotateY(180deg); }
-        @keyframes glowBlue {
-          0%, 100% { box-shadow: 0 0 40px rgba(59,130,246,0.6), 0 0 80px rgba(59,130,246,0.3); }
-          50%       { box-shadow: 0 0 70px rgba(59,130,246,0.9), 0 0 120px rgba(59,130,246,0.5); }
-        }
-        @keyframes glowRed {
-          0%, 100% { box-shadow: 0 0 40px rgba(239,68,68,0.6), 0 0 80px rgba(239,68,68,0.3); }
-          50%       { box-shadow: 0 0 70px rgba(239,68,68,0.9), 0 0 120px rgba(239,68,68,0.5); }
-        }
+        .coin-flip-anim { animation: coinFlip 3s cubic-bezier(0.25,0.46,0.45,0.94) forwards; transform-style: preserve-3d; }
+        .coin-static    { transform: rotateY(${finalDeg}deg); transform-style: preserve-3d; }
+        .face           { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+        .face-back      { transform: rotateY(180deg); }
+        @keyframes glowBlue { 0%,100%{box-shadow:0 0 40px rgba(59,130,246,0.6),0 0 80px rgba(59,130,246,0.3)} 50%{box-shadow:0 0 70px rgba(59,130,246,0.9),0 0 120px rgba(59,130,246,0.5)} }
+        @keyframes glowRed  { 0%,100%{box-shadow:0 0 40px rgba(239,68,68,0.6),0 0 80px rgba(239,68,68,0.3)} 50%{box-shadow:0 0 70px rgba(239,68,68,0.9),0 0 120px rgba(239,68,68,0.5)} }
         .glow-blue { animation: glowBlue 1.2s ease-in-out infinite; }
         .glow-red  { animation: glowRed  1.2s ease-in-out infinite; }
-        @keyframes resultPop {
-          0%   { transform: scale(0.4) translateY(16px); opacity: 0; }
-          65%  { transform: scale(1.12) translateY(-3px); opacity: 1; }
-          100% { transform: scale(1) translateY(0); opacity: 1; }
-        }
+        @keyframes resultPop { 0%{transform:scale(0.4) translateY(16px);opacity:0} 65%{transform:scale(1.12) translateY(-3px);opacity:1} 100%{transform:scale(1) translateY(0);opacity:1} }
         .result-pop { animation: resultPop 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards; }
       `}</style>
 
-      <p className="text-yellow-400/80 font-black tracking-[0.3em] text-xs uppercase">
-        {t.coinflipPhase}
-      </p>
+      <p className="text-yellow-400/80 font-black tracking-[0.3em] text-xs uppercase">{t.coinflipPhase}</p>
 
-      {/* 3D 硬幣容器 */}
       <div style={{ perspective: 600 }}>
-        <div
-          className={stage === 'spinning' ? 'coin-flip-anim' : 'coin-static'}
-          style={{ width: 160, height: 160, position: 'relative' }}
-        >
+        <div className={stage === 'spinning' ? 'coin-flip-anim' : 'coin-static'}
+          style={{ width: 160, height: 160, position: 'relative' }}>
           {/* 正面：藍 */}
-          <div className="face" style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 30%, #60a5fa, #1d4ed8)',
-            boxShadow: 'inset 0 4px 15px rgba(255,255,255,0.3), inset 0 -4px 10px rgba(0,0,0,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 4,
-          }}>
-            <div style={{
-              position: 'absolute', inset: 10, borderRadius: '50%',
-              border: '3px solid rgba(255,255,255,0.25)',
-            }} />
-            <span style={{ fontSize: 56, lineHeight: 1, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}>🔵</span>
-            <span style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.15em' }}>BLUE</span>
+          <div className="face" style={{ position:'absolute',inset:0,borderRadius:'50%',background:'radial-gradient(circle at 35% 30%,#60a5fa,#1d4ed8)',boxShadow:'inset 0 4px 15px rgba(255,255,255,0.3),inset 0 -4px 10px rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:4 }}>
+            <div style={{ position:'absolute',inset:10,borderRadius:'50%',border:'3px solid rgba(255,255,255,0.25)' }} />
+            <span style={{ fontSize:56,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}>🔵</span>
+            <span style={{ fontSize:11,fontWeight:900,color:'rgba(255,255,255,0.85)',letterSpacing:'0.15em' }}>BLUE</span>
           </div>
-
           {/* 背面：紅 */}
-          <div className="face face-back" style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 30%, #f87171, #b91c1c)',
-            boxShadow: 'inset 0 4px 15px rgba(255,255,255,0.3), inset 0 -4px 10px rgba(0,0,0,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 4,
-          }}>
-            <div style={{
-              position: 'absolute', inset: 10, borderRadius: '50%',
-              border: '3px solid rgba(255,255,255,0.25)',
-            }} />
-            <span style={{ fontSize: 56, lineHeight: 1, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}>🔴</span>
-            <span style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.15em' }}>RED</span>
+          <div className="face face-back" style={{ position:'absolute',inset:0,borderRadius:'50%',background:'radial-gradient(circle at 35% 30%,#f87171,#b91c1c)',boxShadow:'inset 0 4px 15px rgba(255,255,255,0.3),inset 0 -4px 10px rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:4 }}>
+            <div style={{ position:'absolute',inset:10,borderRadius:'50%',border:'3px solid rgba(255,255,255,0.25)' }} />
+            <span style={{ fontSize:56,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.5))' }}>🔴</span>
+            <span style={{ fontSize:11,fontWeight:900,color:'rgba(255,255,255,0.85)',letterSpacing:'0.15em' }}>RED</span>
           </div>
         </div>
-
-        {/* 陰影 */}
-        <div style={{
-          margin: '8px auto 0', width: 90, height: 14,
-          borderRadius: '50%',
-          background: 'rgba(0,0,0,0.45)',
-          filter: 'blur(8px)',
-        }} />
+        <div style={{ margin:'8px auto 0',width:90,height:14,borderRadius:'50%',background:'rgba(0,0,0,0.45)',filter:'blur(8px)' }} />
       </div>
 
-      {/* 結果文字 */}
-      <div style={{ minHeight: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight:72,display:'flex',alignItems:'center',justifyContent:'center' }}>
         {stage === 'result' ? (
           <div className={`result-pop text-center ${coinWinner === 'blue' ? 'glow-blue' : 'glow-red'}`}
-            style={{ padding: '16px 32px', borderRadius: 20, background: 'rgba(0,0,0,0.3)' }}>
-            <div style={{
-              fontSize: 36, fontWeight: 900, letterSpacing: '0.05em',
-              color: coinWinner === 'blue' ? '#60a5fa' : '#f87171',
-            }}>
+            style={{ padding:'16px 32px',borderRadius:20,background:'rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize:36,fontWeight:900,letterSpacing:'0.05em',color:coinWinner==='blue'?'#60a5fa':'#f87171' }}>
               {coinWinner === 'blue' ? t.coinBlueWins : t.coinRedWins}
             </div>
-            <p style={{ color: 'rgba(148,163,184,0.8)', fontSize: 13, fontWeight: 700, marginTop: 8 }}
-              className="animate-pulse">
+            <p className="animate-pulse" style={{ color:'rgba(148,163,184,0.8)',fontSize:13,fontWeight:700,marginTop:8 }}>
               {t.coinflipStarting}
             </p>
           </div>
         ) : (
-          <p className="animate-pulse" style={{ color: 'rgba(100,116,139,0.7)', fontSize: 13, fontWeight: 700, letterSpacing: '0.15em' }}>
+          <p className="animate-pulse" style={{ color:'rgba(100,116,139,0.7)',fontSize:13,fontWeight:700,letterSpacing:'0.15em' }}>
             🪙 決定中...
           </p>
         )}
@@ -1122,8 +1050,45 @@ function MultiplayerBPRoom({ onBack }) {
   const [timeLeft, setTimeLeft] = useState(null);
   const [banTimeLeft, setBanTimeLeft] = useState(null);
   const [resetGate, setResetGate] = useState(false);
+  const [coinStage, setCoinStage] = useState('spinning');
   const draftStateRef = useRef(null);
   const idleTimerRef = useRef(null);
+  const banAudioRef  = useRef(null);
+  const pickAudioRef = useRef(null);
+
+  // 預載音效（只在瀏覽器環境執行）
+  useEffect(() => {
+    try {
+      banAudioRef.current  = new Audio('/ban階段.mp3');
+      pickAudioRef.current = new Audio('/pick階段.mp3');
+      banAudioRef.current.loop  = true;
+      pickAudioRef.current.loop = true;
+    } catch(e) { console.warn('Audio init failed', e); }
+    return () => {
+      try { banAudioRef.current?.pause(); pickAudioRef.current?.pause(); } catch(e) {}
+    };
+  }, []);
+
+  // 根據階段切換音效
+  useEffect(() => {
+    const banAudio  = banAudioRef.current;
+    const pickAudio = pickAudioRef.current;
+    if (!banAudio || !pickAudio) return;
+    try {
+      if (phase === 'ban') {
+        pickAudio.pause(); pickAudio.currentTime = 0;
+        banAudio.currentTime = 0;
+        banAudio.play().catch(() => {});
+      } else if (phase === 'pick') {
+        banAudio.pause(); banAudio.currentTime = 0;
+        pickAudio.currentTime = 0;
+        pickAudio.play().catch(() => {});
+      } else {
+        banAudio.pause();  banAudio.currentTime = 0;
+        pickAudio.pause(); pickAudio.currentTime = 0;
+      }
+    } catch(e) {}
+  }, [phase]);
 
   useEffect(() => { draftStateRef.current = draftState; }, [draftState]);
 
@@ -1276,18 +1241,22 @@ function MultiplayerBPRoom({ onBack }) {
     return () => clearInterval(interval);
   }, [phase, turnDeadline, isDone, myRole]);
 
-  // ── 硬幣動畫結束後自動進入 ban 階段 ──
+  // ── 硬幣動畫 + 自動進入 ban ──
   useEffect(() => {
     if (phase !== 'coinflip') return;
+    setCoinStage('spinning');
     const deadline = draftState?.coinflipDeadline;
     if (!deadline) return;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return;
-    const timer = setTimeout(async () => {
+    // 3.2秒後揭曉結果
+    const t1 = setTimeout(() => setCoinStage('result'), 3200);
+    // deadline 後進入 ban 階段
+    const t2 = setTimeout(async () => {
       const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
       await updateDoc(roomRef, { phase: 'ban', banDeadline: Date.now() + 40000 });
     }, remaining);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [phase, draftState?.coinflipDeadline]);
 
   // ── 禁用階段倒數計時 ──
@@ -1536,7 +1505,7 @@ function MultiplayerBPRoom({ onBack }) {
         <div className="order-1 lg:order-2 flex-1 flex flex-col bg-slate-900/60 rounded-3xl border border-slate-800 p-4 lg:p-6 shadow-2xl backdrop-blur-sm relative">
           {/* Coinflip 動畫覆蓋 */}
           {phase === 'coinflip' && (
-            <CoinFlipOverlay coinWinner={coinWinner} t={t} />
+            <CoinFlipOverlay coinWinner={coinWinner} stage={coinStage} t={t} />
           )}
 
           {/* Waiting 階段：準備畫面覆蓋 */}
