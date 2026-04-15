@@ -1069,6 +1069,37 @@ function MultiplayerBPRoom({ onBack }) {
     };
   }, []);
 
+  // ── 衍生狀態（必須在所有 useEffect 之前宣告，避免 TDZ） ──
+  const isDone = draftState?.phase === 'done';
+  const phase = draftState?.phase;
+  const bans = draftState?.bans || { blue: [], red: [] };
+  const picks = draftState?.picks || { blue: [], red: [] };
+  const pickStep = draftState?.pickStep || 0;
+  const turnDeadline = draftState?.turnDeadline;
+  const players = draftState?.players || { blue: null, red: null };
+  const ready = draftState?.ready || { blue: false, red: false };
+  const coinWinner = draftState?.coinWinner || 'blue';
+  const bothSeated = !!(players.blue && players.red);
+  const iAmReady = myRole !== 'spectator' && ready[myRole];
+
+  // 根據硬幣結果動態決定選角順序
+  const pickSequence = makePickSequence(coinWinner);
+
+  const currentStepInfo = isDone ? null
+    : phase === 'waiting'  ? { type: 'waiting',  label: t.waitingPhase }
+    : phase === 'coinflip' ? { type: 'coinflip', label: t.coinflipPhase }
+    : phase === 'ban'      ? { type: 'ban',       label: t.phaseBan }
+    : {
+        ...pickSequence[pickStep],
+        label: pickSequence[pickStep].team === 'blue'
+          ? t.bluePickLabel(pickSequence[pickStep].step)
+          : t.redPickLabel(pickSequence[pickStep].step),
+      };
+
+  const isMyTurn = phase === 'ban'
+    ? (myRole !== 'spectator' && bans[myRole]?.length < 3)
+    : (phase === 'pick' && currentStepInfo?.team === myRole);
+
   // 根據階段切換音效
   useEffect(() => {
     const banAudio  = banAudioRef.current;
@@ -1160,36 +1191,6 @@ function MultiplayerBPRoom({ onBack }) {
     });
     return () => unsub();
   }, [user]);
-
-  const isDone = draftState?.phase === 'done';
-  const phase = draftState?.phase;
-  const bans = draftState?.bans || { blue: [], red: [] };
-  const picks = draftState?.picks || { blue: [], red: [] };
-  const pickStep = draftState?.pickStep || 0;
-  const turnDeadline = draftState?.turnDeadline;
-  const players = draftState?.players || { blue: null, red: null };
-  const ready = draftState?.ready || { blue: false, red: false };
-  const coinWinner = draftState?.coinWinner || 'blue';
-  const bothSeated = !!(players.blue && players.red);
-  const iAmReady = myRole !== 'spectator' && ready[myRole];
-
-  // 根據硬幣結果動態決定選角順序
-  const pickSequence = makePickSequence(coinWinner);
-
-  const currentStepInfo = isDone ? null
-    : phase === 'waiting'  ? { type: 'waiting',  label: t.waitingPhase }
-    : phase === 'coinflip' ? { type: 'coinflip', label: t.coinflipPhase }
-    : phase === 'ban'      ? { type: 'ban',       label: t.phaseBan }
-    : {
-        ...pickSequence[pickStep],
-        label: pickSequence[pickStep].team === 'blue'
-          ? t.bluePickLabel(pickSequence[pickStep].step)
-          : t.redPickLabel(pickSequence[pickStep].step),
-      };
-
-  const isMyTurn = phase === 'ban'
-    ? (myRole !== 'spectator' && bans[myRole]?.length < 3)
-    : (phase === 'pick' && currentStepInfo?.team === myRole);
 
   useEffect(() => {
     if (!isMyTurn) { setSelectedBrawler(null); setSearchTerm(''); }
