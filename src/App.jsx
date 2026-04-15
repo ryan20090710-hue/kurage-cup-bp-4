@@ -107,12 +107,12 @@ function useFirebaseState(key, initialValue) {
     });
     return () => unsubscribe();
   }, [key]);
-  const setSharedState = (value) => {
+  // 不使用 state 閉包，避免 esbuild TDZ 錯誤
+  function setSharedState(value) {
     try {
-      const valueToStore = value instanceof Function ? value(state) : value;
-      set(ref(realtimeDb, key), valueToStore);
+      set(ref(realtimeDb, key), value);
     } catch (error) { console.error('Firebase update error:', error); }
-  };
+  }
   return [state, setSharedState];
 }
 
@@ -819,7 +819,7 @@ function HomePage({ onNavigate }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // 動態產生 pick 順序：先手隊伍先選
-const makePickSequence = (firstTeam) => {
+function makePickSequence(firstTeam) {
   const second = firstTeam === 'blue' ? 'red' : 'blue';
   return [
     { team: firstTeam, step: 1 },
@@ -829,7 +829,7 @@ const makePickSequence = (firstTeam) => {
     { team: firstTeam, step: 3 },
     { team: second,    step: 3 },
   ];
-};
+}
 
 const INITIAL_DRAFT_STATE = {
   phase: 'waiting',   // waiting → coinflip → ban → pick → done
@@ -890,20 +890,20 @@ const translations = {
   }
 };
 
-const getBrawlerName = (brawler, lang) => {
+function getBrawlerName(brawler, lang) {
   if (!brawler) return '';
   if (lang === 'zh') return brawler.name;
   const exceptions = { '8bit': '8-Bit', 'el_primo': 'El Primo', 'mrp': 'Mr. P', 'larry_lawrie': 'Larry & Lawrie', 'rt': 'R-T', 'Jaeyoug': 'Jae-Yong' };
   if (exceptions[brawler.id]) return exceptions[brawler.id];
   return brawler.id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-};
+}
 
 // 頭貼路徑：圖片放在 public/portraits/ 資料夾
-const getPortrait = (brawler) => {
+function getPortrait(brawler) {
   if (!brawler) return null;
   const id = brawler.id.toLowerCase();
   return `/portraits/${id}_portrait.png`;
-};
+}
 
 const UltraLegendarySparkle = () => (
   <div className="absolute inset-0 pointer-events-none">
