@@ -308,22 +308,24 @@ function getButtonIcon(id) {
 function HomePage({ onNavigate }) {
   const [config, setConfig]           = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
   const [fbPositions, setFbPositions] = useFirebaseState('brawl_lobby_positions', DEFAULT_POSITIONS);
-  const [positions, setPositions]     = useState(DEFAULT_POSITIONS); // 初始用預設值，避免 esbuild TDZ
-  const [editMode, setEditMode]   = useState(false);
+  const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
+  const [editMode, setEditMode]       = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [draft, setDraft]         = useState(null);
-  const [gateTarget, setGateTarget] = useState(null);
+  const [draft, setDraft]             = useState(null);
+  const [gateTarget, setGateTarget]   = useState(null);
+  const [isMobile, setIsMobile]       = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  // ── 拖曳狀態（useRef 必須在 useEffect 之前宣告）──
+  const draggingRef   = useRef(null);
+  const offsetRef     = useRef({ x: 0, y: 0 });
+  const containerRef  = useRef(null);
+  const positionsRef  = useRef(positions);
 
   // 當 Firebase 位置更新時，同步到本地（只在非拖曳狀態下更新）
   useEffect(() => {
     if (!draggingRef.current) setPositions(fbPositions);
-  }, [fbPositions]); // 'settings' | 'operator' | null
+  }, [fbPositions]);
 
-  // ── 拖曳狀態 ──
-  const draggingRef   = useRef(null); // 正在拖曳的元素 id
-  const offsetRef     = useRef({ x: 0, y: 0 });
-  const containerRef  = useRef(null);
-  const positionsRef  = useRef(positions);
   useEffect(() => { positionsRef.current = positions; }, [positions]);
 
   // ── 儲存位置到 Firebase ──
@@ -392,8 +394,7 @@ function HomePage({ onNavigate }) {
     setDraft({ ...draft, buttons: btns });
   };
 
-  // ── 手機偵測 ──
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  // ── 手機偵測 resize 監聽 ──
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', check);
