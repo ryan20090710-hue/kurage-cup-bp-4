@@ -306,9 +306,9 @@ function getButtonIcon(id) {
 
 
 function HomePage({ onNavigate }) {
-  const [config, setConfig]       = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
+  const [config, setConfig]           = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
   const [fbPositions, setFbPositions] = useFirebaseState('brawl_lobby_positions', DEFAULT_POSITIONS);
-  const [positions, setPositions] = useState(fbPositions); // 本地拖曳用，拖完才同步
+  const [positions, setPositions]     = useState(DEFAULT_POSITIONS); // 初始用預設值，避免 esbuild TDZ
   const [editMode, setEditMode]   = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft]         = useState(null);
