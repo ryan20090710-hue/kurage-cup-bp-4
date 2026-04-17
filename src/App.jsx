@@ -1463,6 +1463,18 @@ function MultiplayerBPRoom({ onBack }) {
         />
       )}
 
+      {/* BP 結算畫面 */}
+      {isDone && (
+        <BPResultsOverlay
+          picks={picks}
+          bans={bans}
+          lang={lang}
+          t={t}
+          coinWinner={coinWinner}
+          onReset={() => setResetGate(true)}
+        />
+      )}
+
       {/* 禁用區塊 */}
       <div className="flex justify-between items-center mb-6 bg-slate-900/60 p-4 md:p-5 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-md">
         <div className="flex flex-col items-start gap-2">
@@ -1638,9 +1650,146 @@ function MultiplayerBPRoom({ onBack }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 模組二：操作者 / 觀眾（Realtime Database）
-// ═══════════════════════════════════════════════════════════════════════════════
+function BPResultsOverlay({ picks, bans, lang, t, coinWinner, onReset }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const blueColor = '#3b82f6';
+  const redColor  = '#ef4444';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(2,6,23,0.92)', backdropFilter: 'blur(12px)' }}>
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(40px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes shimmer {
+          0%   { background-position: -200% center; }
+          100% { background-position: 200%  center; }
+        }
+        .result-slide { animation: slideUp 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        .result-slide-1 { animation: slideUp 0.5s 0.05s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .result-slide-2 { animation: slideUp 0.5s 0.15s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .result-slide-3 { animation: slideUp 0.5s 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
+        .shimmer-text {
+          background: linear-gradient(90deg, #facc15, #fff, #facc15, #fff, #facc15);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: shimmer 2.5s linear infinite;
+        }
+      `}</style>
+
+      {visible && (
+        <div className="w-full max-w-4xl">
+          {/* 標題 */}
+          <div className="result-slide text-center mb-8">
+            <h2 className="shimmer-text text-4xl md:text-6xl font-black tracking-tighter mb-2">
+              DRAFT COMPLETE
+            </h2>
+            <p className="text-slate-400 text-sm font-bold tracking-widest uppercase">
+              {coinWinner === 'blue'
+                ? (lang === 'zh' ? '🔵 藍方先手' : '🔵 Blue Picked First')
+                : (lang === 'zh' ? '🔴 紅方先手' : '🔴 Red Picked First')}
+            </p>
+          </div>
+
+          {/* 禁用列 */}
+          <div className="result-slide-1 flex items-center justify-between mb-6 bg-slate-900/60 rounded-2xl p-4 border border-slate-800">
+            <div className="flex flex-col items-start gap-2">
+              <span className="text-blue-400 text-xs font-bold tracking-widest uppercase bg-blue-900/30 px-2 py-1 rounded-full">
+                {t.blueBan}
+              </span>
+              <div className="flex gap-2">
+                {bans.blue.map((b, i) => (
+                  <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full overflow-hidden border-2 border-blue-900/50 bg-slate-800 grayscale relative`}>
+                    {b && <img src={getPortrait(b)} alt={getBrawlerName(b, lang)} className="w-full h-full object-cover object-top" />}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-full h-[3px] bg-red-600 rotate-45 shadow-[0_0_6px_rgba(0,0,0,0.9)]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-slate-600 font-black tracking-[0.3em] text-sm hidden md:block">BANS</div>
+            <div className="flex flex-col items-end gap-2">
+              <span className="text-red-400 text-xs font-bold tracking-widest uppercase bg-red-900/30 px-2 py-1 rounded-full">
+                {t.redBan}
+              </span>
+              <div className="flex gap-2">
+                {bans.red.map((b, i) => (
+                  <div key={i} className="w-12 h-12 md:w-14 md:h-14 rounded-full overflow-hidden border-2 border-red-900/50 bg-slate-800 grayscale relative">
+                    {b && <img src={getPortrait(b)} alt={getBrawlerName(b, lang)} className="w-full h-full object-cover object-top" />}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-full h-[3px] bg-red-600 rotate-45 shadow-[0_0_6px_rgba(0,0,0,0.9)]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 選角對比 */}
+          <div className="result-slide-2 grid grid-cols-2 gap-4 mb-8">
+            {/* 藍方 */}
+            <div className="bg-blue-950/30 rounded-2xl p-4 border border-blue-900/50">
+              <h3 className="text-blue-400 font-black text-lg tracking-wider mb-4 text-center uppercase">
+                🔵 {lang === 'zh' ? '藍方陣容' : 'Blue Team'}
+              </h3>
+              <div className="flex flex-col gap-3">
+                {picks.blue.map((b, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-blue-900/20 rounded-xl overflow-hidden border border-blue-900/30">
+                    <div className="w-14 h-14 shrink-0 bg-slate-800 overflow-hidden">
+                      {b && <img src={getPortrait(b)} alt={getBrawlerName(b, lang)} className="w-full h-full object-cover object-top" />}
+                    </div>
+                    <span className="font-black text-white text-sm md:text-base">
+                      {b ? getBrawlerName(b, lang) : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 紅方 */}
+            <div className="bg-red-950/30 rounded-2xl p-4 border border-red-900/50">
+              <h3 className="text-red-400 font-black text-lg tracking-wider mb-4 text-center uppercase">
+                🔴 {lang === 'zh' ? '紅方陣容' : 'Red Team'}
+              </h3>
+              <div className="flex flex-col gap-3">
+                {picks.red.map((b, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-red-900/20 rounded-xl overflow-hidden border border-red-900/30">
+                    <div className="w-14 h-14 shrink-0 bg-slate-800 overflow-hidden">
+                      {b && <img src={getPortrait(b)} alt={getBrawlerName(b, lang)} className="w-full h-full object-cover object-top" />}
+                    </div>
+                    <span className="font-black text-white text-sm md:text-base">
+                      {b ? getBrawlerName(b, lang) : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 重置按鈕 */}
+          <div className="result-slide-3 flex justify-center">
+            <button onClick={onReset}
+              className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 font-black text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(250,204,21,0.4)]">
+              <RotateCcw size={20} />
+              {lang === 'zh' ? '重新開始 BP' : 'New Draft'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MultiplayerBPRoom ─────────────────────────────────────────────────────
 
 const DEFAULT_STATE = {
   matchTitle: '兩方 BP 環節',
