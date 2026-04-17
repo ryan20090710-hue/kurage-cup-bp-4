@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Search, RotateCcw, ShieldX, Check, Users, User,
+  Search, RotateCcw, ShieldX, Check, Star, Users, User,
   ArrowRightLeft, EyeOff, Eye, Globe, MonitorPlay, Settings,
-  Image as ImageIcon, X, Home, Palette,
-  ChevronUp, ChevronDown, Lock, KeyRound
+  Image as ImageIcon, X, Trash2, Home, Palette, AlignJustify, Grid3x3,
+  GripVertical, ChevronUp, ChevronDown, Lock, KeyRound
 } from 'lucide-react';
 
 // ─── Firebase 套件 ────────────────────────────────────────────────────────────
@@ -41,29 +41,6 @@ const firebaseConfig2 = {
 };
 const app2 = initializeApp(firebaseConfig2, 'app2');
 const realtimeDb = getDatabase(app2);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 集中的常數：魔法數字、Firebase 路徑、Realtime Database keys
-// ═══════════════════════════════════════════════════════════════════════════════
-const TIMINGS = {
-  BAN_MS: 40000,              // Ban 階段倒數
-  PICK_MS: 40000,             // Pick 階段倒數
-  COINFLIP_MS: 5000,          // 拋硬幣動畫總長
-  COINFLIP_RESULT_MS: 3200,   // 硬幣揭曉時機
-  IDLE_KICK_MS: 3 * 60 * 1000 // 閒置踢人時間
-};
-
-// Firestore：多人連線房間路徑 ── 所有 doc(firestoreDb, ...) 都改用這個 helper
-const ROOM_PATH = ['artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft'];
-const getRoomRef = () => doc(firestoreDb, ...ROOM_PATH);
-
-// Realtime Database 的 key 名稱集中管理
-const RTDB_KEYS = {
-  PASSWORD:        'brawl_password',
-  LOBBY_CONFIG:    'brawl_lobby_config',
-  LOBBY_POSITIONS: 'brawl_lobby_positions',
-  BP_MATCH:        'brawl_bp_match_current',
-};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 共用資料
@@ -121,40 +98,22 @@ const RARITY_BG = {
 // ─── 雲端同步 Hook（Realtime Database）── 所有元件共用 ───────────────────────
 function useFirebaseState(key, initialValue) {
   const [state, setState] = useState(initialValue);
-  // 把 initialValue 鎖進 ref,避免外部傳入新物件導致 effect 判斷錯誤
-  const initialValueRef = useRef(initialValue);
-
   useEffect(() => {
     const dbRef = ref(realtimeDb, key);
     const unsubscribe = onValue(dbRef, (snapshot) => {
       const data = snapshot.val();
       if (data) { setState(data); }
-      else { set(dbRef, initialValueRef.current); setState(initialValueRef.current); }
+      else { set(dbRef, initialValue); setState(initialValue); }
     });
     return () => unsubscribe();
   }, [key]);
-
-  // useCallback 讓 setter reference 穩定,利於下游 memo 化
-  const setSharedState = useCallback((value) => {
+  // 不使用 state 閉包，避免 esbuild TDZ 錯誤
+  function setSharedState(value) {
     try {
       set(ref(realtimeDb, key), value);
     } catch (error) { console.error('Firebase update error:', error); }
-  }, [key]);
-
+  }
   return [state, setSharedState];
-}
-
-// ─── 密碼共用 hook：PasswordGate / ChangePasswordSection 皆用此訂閱 ──────────
-function usePassword() {
-  const [currentPw, setCurrentPw] = useState(null); // null = 還在載入
-  useEffect(() => {
-    const dbRef = ref(realtimeDb, RTDB_KEYS.PASSWORD);
-    const unsub = onValue(dbRef, (snap) => {
-      setCurrentPw(snap.val() ?? '1234');
-    });
-    return () => unsub();
-  }, []);
-  return currentPw;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -172,12 +131,17 @@ function PasswordGate({ target, onSuccess, onCancel }) {
   const [input, setInput]   = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError]   = useState(false);
-  const currentPw = usePassword();  // ← 共用 hook,不再自己訂閱
+  const [currentPw, setCurrentPw] = useState(null); // null = 還在載入
   const inputRef = useRef(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(timer);
+    setTimeout(() => inputRef.current?.focus(), 50);
+    // 從 Firebase 讀取密碼
+    const dbRef = ref(realtimeDb, 'brawl_password');
+    const unsub = onValue(dbRef, (snap) => {
+      setCurrentPw(snap.val() ?? '1234');
+    });
+    return () => unsub();
   }, []);
 
   const handleSubmit = () => {
@@ -244,7 +208,15 @@ function ChangePasswordSection({ accentColor }) {
   const [confirmPw, setConfirmPw] = useState('');
   const [msg, setMsg]             = useState(null);
   const [show, setShow]           = useState(false);
-  const currentPw = usePassword();  // ← 共用 hook
+  const [currentPw, setCurrentPw] = useState(null);
+
+  useEffect(() => {
+    const dbRef = ref(realtimeDb, 'brawl_password');
+    const unsub = onValue(dbRef, (snap) => {
+      setCurrentPw(snap.val() ?? '1234');
+    });
+    return () => unsub();
+  }, []);
 
   const handleChange = () => {
     if (currentPw === null) return setMsg({ type: 'err', text: '尚未連線，請稍候' });
@@ -252,7 +224,7 @@ function ChangePasswordSection({ accentColor }) {
     if (newPw.length < 1)      return setMsg({ type: 'err', text: '新密碼不能為空' });
     if (newPw !== confirmPw)   return setMsg({ type: 'err', text: '兩次新密碼不符' });
     // 寫入 Firebase，所有裝置同步更新
-    set(ref(realtimeDb, RTDB_KEYS.PASSWORD), newPw);
+    set(ref(realtimeDb, 'brawl_password'), newPw);
     setMsg({ type: 'ok', text: '密碼已同步更新到所有裝置！' });
     setOldPw(''); setNewPw(''); setConfirmPw('');
   };
@@ -334,8 +306,8 @@ function getButtonIcon(id) {
 
 
 function HomePage({ onNavigate }) {
-  const [config, setConfig]           = useFirebaseState(RTDB_KEYS.LOBBY_CONFIG, LOBBY_DEFAULT);
-  const [fbPositions, setFbPositions] = useFirebaseState(RTDB_KEYS.LOBBY_POSITIONS, DEFAULT_POSITIONS);
+  const [config, setConfig]           = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
+  const [fbPositions, setFbPositions] = useFirebaseState('brawl_lobby_positions', DEFAULT_POSITIONS);
   const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
   const [editMode, setEditMode]       = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -348,7 +320,6 @@ function HomePage({ onNavigate }) {
   const offsetRef     = useRef({ x: 0, y: 0 });
   const containerRef  = useRef(null);
   const positionsRef  = useRef(positions);
-  const rafRef        = useRef(null); // requestAnimationFrame 節流用
 
   // 當 Firebase 位置更新時，同步到本地（只在非拖曳狀態下更新）
   useEffect(() => {
@@ -362,11 +333,6 @@ function HomePage({ onNavigate }) {
     const check = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
-  }, []);
-
-  // 卸載時取消尚未執行的 RAF
-  useEffect(() => () => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
   }, []);
 
   // ── 全部改成 function 宣告，避免 Terser/esbuild TDZ 問題 ──
@@ -388,26 +354,19 @@ function HomePage({ onNavigate }) {
 
   function onMouseMove(e) {
     if (!draggingRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    // 每個 frame 最多執行一次,避免 60~120 Hz 瘋狂 setState
-    if (rafRef.current != null) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      if (!draggingRef.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const rawX = ((clientX - offsetRef.current.x - rect.left) / rect.width)  * 100;
-      const rawY = ((clientY - offsetRef.current.y - rect.top)  / rect.height) * 100;
-      const x = Math.min(95, Math.max(5, rawX));
-      const y = Math.min(95, Math.max(5, rawY));
-      const newPos = { ...positionsRef.current, [draggingRef.current]: { x, y } };
-      setPositions(newPos);
-    });
+    const rawX = ((clientX - offsetRef.current.x - rect.left) / rect.width)  * 100;
+    const rawY = ((clientY - offsetRef.current.y - rect.top)  / rect.height) * 100;
+    const x = Math.min(95, Math.max(5, rawX));
+    const y = Math.min(95, Math.max(5, rawY));
+    const newPos = { ...positionsRef.current, [draggingRef.current]: { x, y } };
+    setPositions(newPos);
   }
 
   function onMouseUp() {
     if (draggingRef.current) {
-      if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
       savePositions(positionsRef.current);
       draggingRef.current = null;
     }
@@ -427,9 +386,8 @@ function HomePage({ onNavigate }) {
     const target = idx + dir;
     if (target < 0 || target >= btns.length) return;
     [btns[idx], btns[target]] = [btns[target], btns[idx]];
-    // 重新指派 order:回傳全新物件,避免 mutate 原本的 button 物件
-    const reordered = btns.map((b, i) => ({ ...b, order: i }));
-    setDraft({ ...draft, buttons: reordered });
+    btns.forEach((b, i) => (b.order = i));
+    setDraft({ ...draft, buttons: btns });
   }
 
   const bgStyle = config.bgType === 'image' && config.bgValue.startsWith('http')
@@ -451,10 +409,7 @@ function HomePage({ onNavigate }) {
 
   const editRing = editMode ? 'ring-2 ring-dashed ring-yellow-400/70 rounded-2xl p-1' : '';
 
-  const sortedButtons = useMemo(
-    () => [...config.buttons].sort((a, b) => a.order - b.order),
-    [config.buttons]
-  );
+  const sortedButtons = [...config.buttons].sort((a, b) => a.order - b.order);
 
   // ════════════════════════════════
   // 手機版佈局
@@ -587,8 +542,8 @@ function HomePage({ onNavigate }) {
                             <button onClick={() => moveButton(idx, -1)} disabled={idx === 0} className="p-1 text-slate-400 hover:text-white disabled:opacity-30"><ChevronUp size={13} /></button>
                             <button onClick={() => moveButton(idx, 1)} disabled={idx === draft.buttons.length - 1} className="p-1 text-slate-400 hover:text-white disabled:opacity-30"><ChevronDown size={13} /></button>
                           </div>
-                          <input type="text" value={btn.label} placeholder="按鈕名稱" onChange={e => { const btns = draft.buttons.map(b => b.id === btn.id ? { ...b, label: e.target.value } : b); setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm font-bold" />
-                          <input type="text" value={btn.desc} placeholder="按鈕說明" onChange={e => { const btns = draft.buttons.map(b => b.id === btn.id ? { ...b, desc: e.target.value } : b); setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white/60 px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm" />
+                          <input type="text" value={btn.label} placeholder="按鈕名稱" onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).label = e.target.value; setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm font-bold" />
+                          <input type="text" value={btn.desc} placeholder="按鈕說明" onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).desc = e.target.value; setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white/60 px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm" />
                         </div>
                       );
                     })}
@@ -798,10 +753,10 @@ function HomePage({ onNavigate }) {
                           </div>
                         </div>
                         <input type="text" value={btn.label} placeholder="按鈕名稱"
-                          onChange={e => { const btns = draft.buttons.map(b => b.id === btn.id ? { ...b, label: e.target.value } : b); setDraft({ ...draft, buttons: btns }); }}
+                          onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).label = e.target.value; setDraft({ ...draft, buttons: btns }); }}
                           className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm font-bold" />
                         <input type="text" value={btn.desc} placeholder="按鈕說明"
-                          onChange={e => { const btns = draft.buttons.map(b => b.id === btn.id ? { ...b, desc: e.target.value } : b); setDraft({ ...draft, buttons: btns }); }}
+                          onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).desc = e.target.value; setDraft({ ...draft, buttons: btns }); }}
                           className="w-full bg-slate-900 text-white/60 px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm" />
                       </div>
                     );
@@ -941,20 +896,6 @@ function getPortrait(brawler) {
   const id = brawler.id.toLowerCase();
   return `/portraits/${id}_portrait.png`;
 }
-
-// ─── 預計算的查詢索引 ── 避免每次 render 重新計算 ──────────────────────────
-// 搜尋用:預先做好英文小寫名稱
-const BRAWLER_SEARCH_INDEX = BRAWLERS.map(b => ({
-  ...b,
-  _enNameLower: getBrawlerName(b, 'en').toLowerCase(),
-}));
-
-// OperatorPanel 用:預先組好 { id, name, imageUrl }
-const OPERATOR_BRAWLERS = BRAWLERS.map(b => ({
-  id:       b.id,
-  name:     b.name,
-  imageUrl: getPortrait(b),
-}));
 
 function UltraLegendarySparkle() {
   return (
@@ -1194,14 +1135,14 @@ function MultiplayerBPRoom({ onBack }) {
       if (currentDraft.players.blue === user.uid) roleToKick = 'blue';
       if (currentDraft.players.red === user.uid) roleToKick = 'red';
       if (roleToKick) {
-        const roomRef = getRoomRef();
+        const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
         await setDoc(roomRef, { ...currentDraft, players: { ...currentDraft.players, [roleToKick]: null } });
         alert(lang === 'zh' ? '因閒置超過 3 分鐘，已自動將您移出座位。' : 'You have been removed from the seat due to 3 minutes of inactivity.');
       }
     };
     const resetTimer = () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(kickIdlePlayer, TIMINGS.IDLE_KICK_MS);
+      idleTimerRef.current = setTimeout(kickIdlePlayer, 3 * 60 * 1000);
     };
     const events = ['mousemove', 'keydown', 'click', 'touchstart'];
     events.forEach(event => window.addEventListener(event, resetTimer));
@@ -1223,7 +1164,7 @@ function MultiplayerBPRoom({ onBack }) {
 
   useEffect(() => {
     if (!user) return;
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     const unsub = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
         const raw = docSnap.data();
@@ -1266,12 +1207,10 @@ function MultiplayerBPRoom({ onBack }) {
     }
   }, [phase, bans, picks, myRole, draftState]);
 
-  const filteredBrawlers = useMemo(() => {
-    const lower = searchTerm.toLowerCase();
-    return BRAWLER_SEARCH_INDEX.filter(b =>
-      b.name.includes(searchTerm) || b._enNameLower.includes(lower)
-    );
-  }, [searchTerm]);
+  const filteredBrawlers = useMemo(() =>
+    BRAWLERS.filter(b => b.name.includes(searchTerm) || getBrawlerName(b, 'en').toLowerCase().includes(searchTerm.toLowerCase())),
+    [searchTerm]
+  );
 
   useEffect(() => {
     if (phase !== 'pick' || !turnDeadline || isDone) { setTimeLeft(null); return; }
@@ -1291,11 +1230,11 @@ function MultiplayerBPRoom({ onBack }) {
           const newMyPicks = [...currentDraft.picks[myRole], randomBrawler];
           const newPickStep = currentDraft.pickStep + 1;
           const done = newPickStep >= currentPickSeq.length;
-          const roomRef = getRoomRef();
+          const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
           await updateDoc(roomRef, {
             [`picks.${myRole}`]: newMyPicks,
             pickStep: newPickStep,
-            ...(done ? { phase: 'done', turnDeadline: null } : { turnDeadline: Date.now() + TIMINGS.PICK_MS }),
+            ...(done ? { phase: 'done', turnDeadline: null } : { turnDeadline: Date.now() + 40000 }),
           });
         }
       }
@@ -1312,11 +1251,11 @@ function MultiplayerBPRoom({ onBack }) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) return;
     // 3.2秒後揭曉結果
-    const t1 = setTimeout(() => setCoinStage('result'), TIMINGS.COINFLIP_RESULT_MS);
+    const t1 = setTimeout(() => setCoinStage('result'), 3200);
     // deadline 後進入 ban 階段
     const t2 = setTimeout(async () => {
-      const roomRef = getRoomRef();
-      await updateDoc(roomRef, { phase: 'ban', banDeadline: Date.now() + TIMINGS.BAN_MS });
+      const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
+      await updateDoc(roomRef, { phase: 'ban', banDeadline: Date.now() + 40000 });
     }, remaining);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [phase, draftState?.coinflipDeadline]);
@@ -1348,14 +1287,14 @@ function MultiplayerBPRoom({ onBack }) {
           }
         }
         if (changed) {
-          const roomRef = getRoomRef();
+          const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
           await updateDoc(roomRef, {
             'bans.blue': newState.bans.blue,
             'bans.red':  newState.bans.red,
             phase: 'pick',
             pickStep: 0,
             banDeadline: null,
-            turnDeadline: Date.now() + TIMINGS.PICK_MS,
+            turnDeadline: Date.now() + 40000,
           });
         }
       }
@@ -1374,12 +1313,12 @@ function MultiplayerBPRoom({ onBack }) {
 
   const joinTeam = async (team) => {
     if (players[team]) return;
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     await updateDoc(roomRef, { [`players.${team}`]: user.uid });
   };
   const leaveTeam = async () => {
     if (myRole === 'spectator') return;
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     await updateDoc(roomRef, {
       [`players.${myRole}`]: null,
       [`ready.${myRole}`]: false,
@@ -1391,7 +1330,7 @@ function MultiplayerBPRoom({ onBack }) {
   };
   const handleReady = async () => {
     if (myRole === 'spectator' || !bothSeated || phase !== 'waiting') return;
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     const newReady = { ...ready, [myRole]: true };
     if (newReady.blue && newReady.red) {
       // 雙方都準備 → 進入拋硬幣階段，隨機決定先手
@@ -1400,7 +1339,7 @@ function MultiplayerBPRoom({ onBack }) {
         ready: newReady,
         phase: 'coinflip',
         coinWinner: winner,
-        coinflipDeadline: Date.now() + TIMINGS.COINFLIP_MS, // 5秒動畫後自動進入 ban
+        coinflipDeadline: Date.now() + 5000, // 5秒動畫後自動進入 ban
       });
     } else {
       await updateDoc(roomRef, { ready: newReady });
@@ -1409,7 +1348,7 @@ function MultiplayerBPRoom({ onBack }) {
 
   const handleConfirm = async () => {
     if (!selectedBrawler || isDone || !isMyTurn) return;
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
 
     if (phase === 'ban') {
       const newMyBans = [...bans[myRole], selectedBrawler];
@@ -1417,7 +1356,7 @@ function MultiplayerBPRoom({ onBack }) {
       const allDone = newMyBans.length === 3 && otherBans.length === 3;
       const update = {
         [`bans.${myRole}`]: newMyBans,
-        ...(allDone ? { phase: 'pick', pickStep: 0, turnDeadline: Date.now() + TIMINGS.PICK_MS, banDeadline: null } : {}),
+        ...(allDone ? { phase: 'pick', pickStep: 0, turnDeadline: Date.now() + 40000, banDeadline: null } : {}),
       };
       await updateDoc(roomRef, update);
 
@@ -1435,7 +1374,7 @@ function MultiplayerBPRoom({ onBack }) {
   };
 
   const handleReset = async () => {
-    const roomRef = getRoomRef();
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     await setDoc(roomRef, INITIAL_DRAFT_STATE);
     setSelectedBrawler(null); setSearchTerm('');
   };
@@ -1943,58 +1882,35 @@ function BrawlerSelectModal({ brawlers, onClose, onSelect }) {
 }
 
 function OperatorPanel({ onBack }) {
-  const [state, setState] = useFirebaseState(RTDB_KEYS.BP_MATCH, DEFAULT_STATE);
-  // brawlers 現在是頂層的 OPERATOR_BRAWLERS 常數,不必每次 render 重建
+  const [state, setState] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
+  // 直接用本地 BRAWLERS + portraits，不依賴外部 API
+  const brawlers = BRAWLERS.map(b => ({
+    id:       b.id,
+    name:     b.name,
+    imageUrl: getPortrait(b),   // /portraits/{id}_portrait.png
+  }));
   const [modalOpen, setModalOpen] = useState(false);
   const [activeSlot, setActiveSlot] = useState(null);
 
-  const openBrawlerSelect = useCallback((team, type, index) => {
-    setActiveSlot({ team, type, index });
-    setModalOpen(true);
-  }, []);
-
-  // ✅ 修正原本的 mutation bug:{...state} 只是淺拷貝,直接改內部會 mutate 原 state
-  const handleSelectBrawler = useCallback((brawler) => {
+  const openBrawlerSelect = (team, type, index) => { setActiveSlot({ team, type, index }); setModalOpen(true); };
+  const handleSelectBrawler = (brawler) => {
     if (!activeSlot) return;
-    const { team, type, index } = activeSlot;
-    setState({
-      ...state,
-      [team]: {
-        ...state[team],
-        [type]: state[team][type].map((slot, i) =>
-          i === index ? { ...slot, brawler } : slot
-        ),
-      },
-    });
-    setModalOpen(false);
-  }, [activeSlot, state, setState]);
-
-  const handleClearBrawler = useCallback((team, type, index) => {
-    setState({
-      ...state,
-      [team]: {
-        ...state[team],
-        [type]: state[team][type].map((slot, i) =>
-          i === index ? { ...slot, brawler: null } : slot
-        ),
-      },
-    });
-  }, [state, setState]);
-
-  // 用遞迴方式做深度不可變更新,取代原本在迴圈中直接賦值的 mutation
-  const handleStateChange = useCallback((keys, value) => {
-    const setDeep = (obj, ks, v) => {
-      if (ks.length === 0) return v;
-      const [k, ...rest] = ks;
-      // 若 obj[k] 是陣列的索引更新,用陣列語意處理
-      if (Array.isArray(obj)) {
-        const idx = Number(k);
-        return obj.map((item, i) => (i === idx ? setDeep(item, rest, v) : item));
-      }
-      return { ...obj, [k]: setDeep(obj?.[k], rest, v) };
-    };
-    setState(setDeep(state, keys, value));
-  }, [state, setState]);
+    const newState = { ...state };
+    newState[activeSlot.team][activeSlot.type][activeSlot.index].brawler = brawler;
+    setState(newState); setModalOpen(false);
+  };
+  const handleClearBrawler = (team, type, index) => {
+    const newState = { ...state };
+    newState[team][type][index].brawler = null;
+    setState(newState);
+  };
+  const handleStateChange = (keys, value) => {
+    const newState = { ...state };
+    let current = newState;
+    for (let i = 0; i < keys.length - 1; i++) current = current[keys[i]];
+    current[keys[keys.length - 1]] = value;
+    setState(newState);
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
@@ -2024,7 +1940,7 @@ function OperatorPanel({ onBack }) {
               <div><label className="block text-sm font-semibold mb-1">隊伍名稱</label><input type="text" value={state.team1.name} onChange={(e) => handleStateChange(['team1', 'name'], e.target.value)} className="w-full p-2 border rounded outline-none" /></div>
               <div><label className="block text-sm font-semibold mb-1">隊伍顏色</label><input type="color" value={state.team1.color} onChange={(e) => handleStateChange(['team1', 'color'], e.target.value)} className="w-full h-10 p-1 border rounded cursor-pointer" /></div>
               <div><label className="block text-sm font-semibold mb-1">玩家 ID</label>
-                {state.team1.picks.map((pick, i) => (<input key={pick.id} type="text" value={pick.player} onChange={(e) => { const newPicks = state.team1.picks.map((p, j) => j === i ? { ...p, player: e.target.value } : p); handleStateChange(['team1', 'picks'], newPicks); }} className="w-full p-2 border rounded mb-2 outline-none text-sm" />))}
+                {state.team1.picks.map((pick, i) => (<input key={pick.id} type="text" value={pick.player} onChange={(e) => { const newPicks = [...state.team1.picks]; newPicks[i].player = e.target.value; handleStateChange(['team1', 'picks'], newPicks); }} className="w-full p-2 border rounded mb-2 outline-none text-sm" />))}
               </div>
             </div>
           </div>
@@ -2035,7 +1951,7 @@ function OperatorPanel({ onBack }) {
               <div><label className="block text-sm font-semibold mb-1">隊伍名稱</label><input type="text" value={state.team2.name} onChange={(e) => handleStateChange(['team2', 'name'], e.target.value)} className="w-full p-2 border rounded outline-none" /></div>
               <div><label className="block text-sm font-semibold mb-1">隊伍顏色</label><input type="color" value={state.team2.color} onChange={(e) => handleStateChange(['team2', 'color'], e.target.value)} className="w-full h-10 p-1 border rounded cursor-pointer" /></div>
               <div><label className="block text-sm font-semibold mb-1">玩家 ID</label>
-                {state.team2.picks.map((pick, i) => (<input key={pick.id} type="text" value={pick.player} onChange={(e) => { const newPicks = state.team2.picks.map((p, j) => j === i ? { ...p, player: e.target.value } : p); handleStateChange(['team2', 'picks'], newPicks); }} className="w-full p-2 border rounded mb-2 outline-none text-sm" />))}
+                {state.team2.picks.map((pick, i) => (<input key={pick.id} type="text" value={pick.player} onChange={(e) => { const newPicks = [...state.team2.picks]; newPicks[i].player = e.target.value; handleStateChange(['team2', 'picks'], newPicks); }} className="w-full p-2 border rounded mb-2 outline-none text-sm" />))}
               </div>
             </div>
           </div>
@@ -2076,7 +1992,7 @@ function OperatorPanel({ onBack }) {
           </div>
         </div>
       </main>
-      {modalOpen && <BrawlerSelectModal brawlers={OPERATOR_BRAWLERS} onClose={() => setModalOpen(false)} onSelect={handleSelectBrawler} />}
+      {modalOpen && <BrawlerSelectModal brawlers={brawlers} onClose={() => setModalOpen(false)} onSelect={handleSelectBrawler} />}
     </div>
   );
 }
@@ -2108,7 +2024,7 @@ function ViewerPickSlot({ pick, color }) {
 }
 
 function ViewerView({ onBack }) {
-  const [state] = useFirebaseState(RTDB_KEYS.BP_MATCH, DEFAULT_STATE);
+  const [state] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
   const bgStyle = state.background.startsWith('http')
     ? { backgroundImage: `url(${state.background})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundColor: state.background };
@@ -2154,15 +2070,13 @@ export default function App() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const v = urlParams.get('view');
-    if (v && ['viewer', 'operator', 'multiplayer'].includes(v)) {
-      setView(v);
-    }
+    if (v === 'viewer') setView('viewer');
+    else if (v === 'operator') setView('operator');
+    else if (v === 'multiplayer') setView('multiplayer');
   }, []);
 
-  const goHome = useCallback(() => setView('home'), []);
-
-  if (view === 'multiplayer') return <MultiplayerBPRoom onBack={goHome} />;
-  if (view === 'operator')    return <OperatorPanel onBack={goHome} />;
-  if (view === 'viewer')      return <ViewerView onBack={goHome} />;
+  if (view === 'multiplayer') return <MultiplayerBPRoom onBack={() => setView('home')} />;
+  if (view === 'operator')    return <OperatorPanel onBack={() => setView('home')} />;
+  if (view === 'viewer')      return <ViewerView onBack={() => setView('home')} />;
   return <HomePage onNavigate={setView} />;
 }
