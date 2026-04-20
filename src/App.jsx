@@ -56,6 +56,20 @@ const firebaseConfig3 = {
 const app3 = initializeApp(firebaseConfig3, 'app3');
 const bracketDb = getDatabase(app3);
 
+// ─── Firebase App 4：Realtime Database（記分板） ──────────────────────────────
+const firebaseConfig4 = {
+  apiKey: "AIzaSyCEL7dMOBVmRcIyMPlVo03IuRcbwB0LWX0",
+  authDomain: "score-board-e309d.firebaseapp.com",
+  databaseURL: "https://score-board-e309d-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "score-board-e309d",
+  storageBucket: "score-board-e309d.firebasestorage.app",
+  messagingSenderId: "207375554363",
+  appId: "1:207375554363:web:2d3cbb8ab89041f27e891e",
+  measurementId: "G-YN4H8VM2W2"
+};
+const app4 = initializeApp(firebaseConfig4, 'app4');
+const scoreboardDb = getDatabase(app4);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 共用資料
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -135,11 +149,12 @@ function useFirebaseState(key, initialValue) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const GATE_LABELS = {
-  settings:         { icon: '🎨', name: '主畫面設定' },
-  operator:         { icon: '⚙️', name: '操作者控制台' },
-  editmode:         { icon: '✥',  name: '自由移動模式' },
-  reset:            { icon: '🔄', name: '重置 BP 房間' },
-  bracket_operator: { icon: '🏆', name: '對戰表控制台' },
+  settings:           { icon: '🎨', name: '主畫面設定' },
+  operator:           { icon: '⚙️', name: '操作者控制台' },
+  editmode:           { icon: '✥',  name: '自由移動模式' },
+  reset:              { icon: '🔄', name: '重置 BP 房間' },
+  bracket_operator:   { icon: '🏆', name: '對戰表控制台' },
+  scoreboard_operator:{ icon: '🏅', name: '記分板控制台' },
 };
 
 function PasswordGate({ target, onSuccess, onCancel }) {
@@ -151,11 +166,13 @@ function PasswordGate({ target, onSuccess, onCancel }) {
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
-    // bracket_operator 用 bracketDb 的密碼，其他用 realtimeDb
-    const isBracket = target === 'bracket_operator';
+    const isBracket    = target === 'bracket_operator';
+    const isScoreboard = target === 'scoreboard_operator';
     const dbRef = isBracket
       ? ref(bracketDb, 'bracket_password')
-      : ref(realtimeDb, 'brawl_password');
+      : isScoreboard
+        ? ref(scoreboardDb, 'scoreboard_password')
+        : ref(realtimeDb, 'brawl_password');
     const unsub = onValue(dbRef, (snap) => {
       setCurrentPw(snap.val() ?? '1234');
     });
@@ -302,29 +319,33 @@ const LOBBY_DEFAULT = {
   bgValue: '#020617',
   accentColor: '#facc15',
   buttons: [
-    { id: 'multiplayer',      label: '多人連線 BP',    desc: '雙方即時禁用 & 選角',    order: 0 },
-    { id: 'operator',         label: '操作者控制台',   desc: '手動管理賽事 BP 顯示',   order: 1 },
-    { id: 'viewer',           label: '觀眾視角',       desc: 'OBS / 轉播用乾淨畫面',  order: 2 },
-    { id: 'bracket_operator', label: '對戰表控制台',   desc: '管理 8 強賽事對戰表',    order: 3 },
-    { id: 'bracket_viewer',   label: '對戰表展示',     desc: 'OBS 用對戰表畫面',      order: 4 },
+    { id: 'multiplayer',       label: '多人連線 BP',    desc: '雙方即時禁用 & 選角',    order: 0 },
+    { id: 'operator',          label: '操作者控制台',   desc: '手動管理賽事 BP 顯示',   order: 1 },
+    { id: 'viewer',            label: '觀眾視角',       desc: 'OBS / 轉播用乾淨畫面',  order: 2 },
+    { id: 'bracket_operator',  label: '對戰表控制台',   desc: '管理 8 強賽事對戰表',    order: 3 },
+    { id: 'bracket_viewer',    label: '對戰表展示',     desc: 'OBS 用對戰表畫面',      order: 4 },
   ],
 };
 
 const DEFAULT_POSITIONS = {
-  title:            { x: 50, y: 15 },
-  subtitle:         { x: 50, y: 24 },
-  multiplayer:      { x: 15, y: 60 },
-  operator:         { x: 35, y: 60 },
-  viewer:           { x: 55, y: 60 },
-  bracket_operator: { x: 72, y: 60 },
-  bracket_viewer:   { x: 88, y: 60 },
+  title:              { x: 50, y: 14 },
+  subtitle:           { x: 50, y: 23 },
+  multiplayer:        { x: 12, y: 60 },
+  operator:           { x: 28, y: 60 },
+  viewer:             { x: 44, y: 60 },
+  bracket_operator:   { x: 60, y: 60 },
+  bracket_viewer:     { x: 76, y: 60 },
+  scoreboard_operator:{ x: 88, y: 78 },
+  scoreboard_viewer:  { x: 88, y: 88 },
 };
 
 function getButtonIcon(id) {
-  if (id === 'multiplayer')      return Users;
-  if (id === 'operator')         return Settings;
-  if (id === 'bracket_operator') return Trophy;
-  if (id === 'bracket_viewer')   return Trophy;
+  if (id === 'multiplayer')        return Users;
+  if (id === 'operator')           return Settings;
+  if (id === 'bracket_operator')   return Trophy;
+  if (id === 'bracket_viewer')     return Trophy;
+  if (id === 'scoreboard_operator') return Star;
+  if (id === 'scoreboard_viewer')  return MonitorPlay;
   return MonitorPlay;
 }
 
@@ -527,6 +548,33 @@ function HomePage({ onNavigate }) {
                 <div className="text-white/40 text-xs mt-0.5">OBS / 轉播用乾淨畫面</div>
               </div>
             </button>
+            <button
+              onClick={() => setGateTarget('scoreboard_operator')}
+              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all relative"
+              style={{ backgroundColor: 'rgba(250,204,21,0.06)' }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/10">
+                <Star size={20} className="text-yellow-400" />
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="text-white font-black text-sm leading-tight">記分板控制台</div>
+                <div className="text-white/40 text-xs mt-0.5">管理兩隊即時比分</div>
+              </div>
+              <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
+            </button>
+            <button
+              onClick={() => onNavigate('scoreboard_viewer')}
+              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
+              style={{ backgroundColor: 'rgba(59,130,246,0.06)' }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-blue-400/10">
+                <Star size={20} className="text-blue-400" />
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="text-white font-black text-sm leading-tight">記分板展示</div>
+                <div className="text-white/40 text-xs mt-0.5">OBS / 轉播用畫面</div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -540,6 +588,7 @@ function HomePage({ onNavigate }) {
               if (t === 'settings') openSettingsAfterAuth();
               if (t === 'operator') onNavigate('operator');
               if (t === 'bracket_operator') onNavigate('bracket_operator');
+              if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
             }}
             onCancel={() => setGateTarget(null)}
           />
@@ -682,6 +731,7 @@ function HomePage({ onNavigate }) {
                 if (editMode) return;
                 if (btn.id === 'operator') setGateTarget('operator');
                 else if (btn.id === 'bracket_operator') setGateTarget('bracket_operator');
+                else if (btn.id === 'scoreboard_operator') setGateTarget('scoreboard_operator');
                 else onNavigate(btn.id);
               }}
               className={`flex flex-col items-center p-6 md:p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-xl transition-all group
@@ -691,7 +741,7 @@ function HomePage({ onNavigate }) {
               onMouseLeave={e => { if (!editMode) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
             >
               <Icon className="w-12 h-12 mb-3 transition-transform group-hover:scale-110" style={{ color: config.accentColor }} />
-              {(btn.id === 'operator' || btn.id === 'bracket_operator') && (
+              {(btn.id === 'operator' || btn.id === 'bracket_operator' || btn.id === 'scoreboard_operator') && (
                 <Lock size={13} className="absolute top-2 right-2 text-yellow-400 opacity-70" />
               )}
               <h2 className="text-lg font-black mb-1 text-white">{btn.label}</h2>
@@ -738,9 +788,9 @@ function HomePage({ onNavigate }) {
         </div>
       )}
 
-      {/* ── 固定的對戰表按鈕（永遠顯示在左下角） ── */}
+      {/* ── 固定的對戰表 + 記分板按鈕（永遠顯示在左下角） ── */}
       {!editMode && (
-        <div className="absolute bottom-5 left-5 z-40 flex gap-2">
+        <div className="absolute bottom-5 left-5 z-40 flex gap-2 flex-wrap">
           <button
             onClick={() => setGateTarget('bracket_operator')}
             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm relative"
@@ -755,6 +805,21 @@ function HomePage({ onNavigate }) {
           >
             <Trophy size={14} className="text-blue-400" />
             對戰表展示
+          </button>
+          <button
+            onClick={() => setGateTarget('scoreboard_operator')}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
+          >
+            <Star size={14} className="text-yellow-400" />
+            記分板控制台
+            <Lock size={8} className="text-yellow-400" />
+          </button>
+          <button
+            onClick={() => onNavigate('scoreboard_viewer')}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
+          >
+            <Star size={14} className="text-blue-400" />
+            記分板展示
           </button>
         </div>
       )}
@@ -877,6 +942,7 @@ function HomePage({ onNavigate }) {
             if (t === 'settings') openSettingsAfterAuth();
             if (t === 'operator') onNavigate('operator');
               if (t === 'bracket_operator') onNavigate('bracket_operator');
+              if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
             if (t === 'editmode') setEditMode(true);
           }}
           onCancel={() => setGateTarget(null)}
@@ -2692,6 +2758,427 @@ function BracketOperator({ onBack }) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 記分板系統
+// ═══════════════════════════════════════════════════════════════════════════════
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 賽事記分板系統（自由 Canvas 款式）
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MAX_GAMES = 5;
+const makeGame = () => ({ s1: null, s2: null, modeImage: '', mapImage: '', mapName: '', status: 'pending' });
+
+const SCOREBOARD_DEFAULT = {
+  background: '#0d0d12',
+  roundLabel: '八強',
+  winColor: '#ec4899',
+  maxWins: 3,
+  team1: { name: 'Team 1', players: '', color: '#ffffff' },
+  team2: { name: 'Team 2', players: '', color: '#ffffff' },
+  games: Array.from({ length: MAX_GAMES }, makeGame),
+};
+
+const DEFAULT_SB_LAYOUT = {
+  label:   { x:  5, y: 46, w: 170, visible: true },
+  mode_0:  { x: 22, y:  6, w: 110, visible: true },
+  mode_1:  { x: 36, y:  6, w: 110, visible: true },
+  mode_2:  { x: 50, y:  6, w: 110, visible: true },
+  mode_3:  { x: 64, y:  6, w: 110, visible: true },
+  mode_4:  { x: 78, y:  6, w: 110, visible: true },
+  map_0:   { x: 22, y: 24, w: 110, visible: true },
+  map_1:   { x: 36, y: 24, w: 110, visible: true },
+  map_2:   { x: 50, y: 24, w: 110, visible: true },
+  map_3:   { x: 64, y: 24, w: 110, visible: true },
+  map_4:   { x: 78, y: 24, w: 110, visible: true },
+  t1_name: { x:  5, y: 52, w: 220, visible: true },
+  t1_0:    { x: 22, y: 56, w: 110, visible: true },
+  t1_1:    { x: 36, y: 56, w: 110, visible: true },
+  t1_2:    { x: 50, y: 56, w: 110, visible: true },
+  t1_3:    { x: 64, y: 56, w: 110, visible: true },
+  t1_4:    { x: 78, y: 56, w: 110, visible: true },
+  t1_wins: { x: 91, y: 56, w: 100, visible: true },
+  t2_name: { x:  5, y: 74, w: 220, visible: true },
+  t2_0:    { x: 22, y: 78, w: 110, visible: true },
+  t2_1:    { x: 36, y: 78, w: 110, visible: true },
+  t2_2:    { x: 50, y: 78, w: 110, visible: true },
+  t2_3:    { x: 64, y: 78, w: 110, visible: true },
+  t2_4:    { x: 78, y: 78, w: 110, visible: true },
+  t2_wins: { x: 91, y: 78, w: 100, visible: true },
+};
+
+function useScoreboard() {
+  const [state, setState] = useState(SCOREBOARD_DEFAULT);
+  useEffect(() => {
+    const dbRef = ref(scoreboardDb, 'scoreboard');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) {
+        const norm = { ...SCOREBOARD_DEFAULT, ...data };
+        if (data.games) {
+          const arr = Array.isArray(data.games) ? data.games : Object.values(data.games);
+          norm.games = Array.from({ length: MAX_GAMES }, (_, i) => ({ ...makeGame(), ...(arr[i] || {}) }));
+        }
+        setState(norm);
+      } else { set(dbRef, SCOREBOARD_DEFAULT); setState(SCOREBOARD_DEFAULT); }
+    });
+    return () => unsub();
+  }, []);
+  function update(path, value) { set(ref(scoreboardDb, `scoreboard/${path}`), value); }
+  function updateGame(i, field, value) { set(ref(scoreboardDb, `scoreboard/games/${i}`), { ...state.games[i], [field]: value }); }
+  return [state, update, updateGame];
+}
+
+function calcWins(games) {
+  let w1 = 0, w2 = 0;
+  for (const g of games) {
+    if (g.status === 'done' && g.s1 != null && g.s2 != null) {
+      if (g.s1 > g.s2) w1++;
+      else if (g.s2 > g.s1) w2++;
+    }
+  }
+  return { w1, w2 };
+}
+
+function ScoreboardOperator({ onBack }) {
+  const [state, update, updateGame] = useScoreboard();
+  const [showPwChange, setShowPwChange] = useState(false);
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [cfmPw, setCfmPw] = useState('');
+  const [pwMsg, setPwMsg] = useState(null);
+  const [currentPw, setCurrentPw] = useState('1234');
+  useEffect(() => {
+    const unsub = onValue(ref(scoreboardDb, 'scoreboard_password'), snap => setCurrentPw(snap.val() ?? '1234'));
+    return () => unsub();
+  }, []);
+  function changePw() {
+    if (oldPw !== currentPw) return setPwMsg({ type: 'err', text: '原密碼錯誤' });
+    if (!newPw) return setPwMsg({ type: 'err', text: '新密碼不能為空' });
+    if (newPw !== cfmPw) return setPwMsg({ type: 'err', text: '兩次新密碼不符' });
+    set(ref(scoreboardDb, 'scoreboard_password'), newPw);
+    setPwMsg({ type: 'ok', text: '密碼已更新！' });
+    setOldPw(''); setNewPw(''); setCfmPw('');
+  }
+  const { w1, w2 } = calcWins(state.games);
+  const maxWins = state.maxWins ?? 3;
+  const STATUS_LABELS = { pending: '❓待定', live: '🔴進行中', done: '✅結束', skip: '➖跳過' };
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans flex flex-col">
+      <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm"><Home size={16} /> 首頁</button>
+          <h1 className="text-xl font-black flex items-center gap-2"><Star className="w-5 h-5 text-yellow-500" /> 記分板控制台 🟢</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold text-slate-500">目前：</span>
+          <span className="font-black text-xl" style={{ color: state.winColor }}>{w1} : {w2}</span>
+          <button onClick={() => set(ref(scoreboardDb, 'scoreboard'), { ...SCOREBOARD_DEFAULT })} className="px-4 py-2 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 font-bold transition">重置</button>
+        </div>
+      </header>
+      <main className="flex-1 p-4 md:p-6 space-y-5 overflow-y-auto max-w-5xl mx-auto w-full">
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-base mb-4 border-b pb-2">🎨 全域設定</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">輪次標題</label>
+              <input type="text" value={state.roundLabel || ''} onChange={e => update('roundLabel', e.target.value)} className="w-full p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">先到幾勝</label>
+              <div className="flex gap-2">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => update('maxWins', n)} className={`flex-1 py-2 rounded-lg font-black text-sm transition border ${maxWins===n?'bg-yellow-400 text-slate-900 border-yellow-400':'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{n}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">背景</label>
+              <div className="flex gap-2">
+                <input type="color" value={state.background?.startsWith('#') ? state.background : '#0d0d12'} onChange={e => update('background', e.target.value)} className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+                <input type="text" value={state.background || ''} onChange={e => update('background', e.target.value)} className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono min-w-0 focus:border-yellow-400" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">勝場數字顏色</label>
+              <div className="flex gap-2">
+                <input type="color" value={state.winColor || '#ec4899'} onChange={e => update('winColor', e.target.value)} className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+                <input type="text" value={state.winColor || ''} onChange={e => update('winColor', e.target.value)} className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono min-w-0 focus:border-yellow-400" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {['team1','team2'].map((team, ti) => (
+            <div key={team} className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+              <h2 className="font-bold text-base mb-4 border-b pb-2">{ti===0?'🔵':'🔴'} 隊伍 {ti+1}</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">隊伍名稱</label>
+                  <input type="text" value={state[team]?.name||''} onChange={e => update(`${team}/name`, e.target.value)} className="w-full p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">選手</label>
+                  <textarea value={state[team]?.players||''} onChange={e => update(`${team}/players`, e.target.value)} rows={2} className="w-full p-2 border rounded-lg outline-none text-sm resize-none focus:border-yellow-400" placeholder="Player1, Player2, Player3" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-base mb-4 border-b pb-2">🎮 場次設定</h2>
+          <div className="space-y-3">
+            {state.games.map((g, i) => (
+              <div key={i} className={`rounded-xl border p-4 ${g.status==='done'?'border-emerald-200 bg-emerald-50':g.status==='live'?'border-red-200 bg-red-50':g.status==='skip'?'opacity-50 bg-slate-50 border-slate-100':'border-slate-200 bg-white'}`}>
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <span className="font-black text-slate-600 text-sm">Game {i+1}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {Object.entries(STATUS_LABELS).map(([k,v]) => (
+                      <button key={k} onClick={() => updateGame(i,'status',k)} className={`px-2 py-1 rounded-lg text-xs font-bold transition ${g.status===k?'bg-yellow-400 text-slate-900':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{v}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">模式圖示網址</label>
+                    <input type="text" value={g.modeImage||''} onChange={e => updateGame(i,'modeImage',e.target.value)} placeholder="https://..." className="w-full p-1.5 border rounded-lg outline-none text-xs font-mono focus:border-yellow-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">地圖圖片網址</label>
+                    <input type="text" value={g.mapImage||''} onChange={e => updateGame(i,'mapImage',e.target.value)} placeholder="https://..." className="w-full p-1.5 border rounded-lg outline-none text-xs font-mono focus:border-yellow-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">地圖名稱</label>
+                    <input type="text" value={g.mapName||''} onChange={e => updateGame(i,'mapName',e.target.value)} placeholder="中心舞台" className="w-full p-1.5 border rounded-lg outline-none text-xs focus:border-yellow-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">比分（隊1 : 隊2）</label>
+                    <div className="flex items-center gap-1">
+                      <input type="number" min="0" value={g.s1??''} onChange={e => updateGame(i,'s1',e.target.value===''?null:Number(e.target.value))} className="w-12 p-1.5 border rounded-lg outline-none text-sm font-black text-center focus:border-yellow-400" />
+                      <span className="text-slate-300 font-bold">:</span>
+                      <input type="number" min="0" value={g.s2??''} onChange={e => updateGame(i,'s2',e.target.value===''?null:Number(e.target.value))} className="w-12 p-1.5 border rounded-lg outline-none text-sm font-black text-center focus:border-yellow-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <button onClick={() => setShowPwChange(v => !v)} className="w-full flex items-center justify-between font-bold text-sm text-slate-700">
+            <span className="flex items-center gap-2"><KeyRound size={15} className="text-yellow-500" /> 修改密碼</span>
+            <span className="text-slate-400">{showPwChange?'▲':'▼'}</span>
+          </button>
+          {showPwChange && (
+            <div className="mt-4 space-y-2">
+              {[['原密碼',oldPw,setOldPw],['新密碼',newPw,setNewPw],['確認新密碼',cfmPw,setCfmPw]].map(([label,val,fn])=>(
+                <div key={label}>
+                  <label className="block text-xs text-slate-400 mb-1">{label}</label>
+                  <input type="password" value={val} onChange={e=>{fn(e.target.value);setPwMsg(null);}} onKeyDown={e=>e.key==='Enter'&&changePw()} className="w-full p-2 border rounded-lg outline-none text-sm font-mono tracking-widest focus:border-yellow-400" />
+                </div>
+              ))}
+              {pwMsg && <p className={`text-xs font-bold ${pwMsg.type==='ok'?'text-emerald-500':'text-red-500'}`}>{pwMsg.text}</p>}
+              <button onClick={changePw} className="w-full mt-2 py-2 rounded-lg bg-yellow-400 text-slate-900 font-black text-sm hover:opacity-90">確認修改</button>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function ScoreboardViewer({ onBack }) {
+  const [state] = useScoreboard();
+  const [layout, setLayout] = useState(DEFAULT_SB_LAYOUT);
+  const [editMode, setEditMode] = useState(false);
+  const draggingRef    = useRef(null);
+  const resizingRef    = useRef(null);
+  const dragOffRef     = useRef({ x: 0, y: 0 });
+  const resizeStartRef = useRef({ mx: 0, w: 0 });
+  const layoutRef      = useRef(layout);
+  const containerRef   = useRef(null);
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+
+  const { team1, team2, background, roundLabel, winColor, maxWins = 3, games } = state;
+  const { w1, w2 } = calcWins(games);
+  const textDim = 'rgba(255,255,255,0.35)';
+
+  useEffect(() => {
+    const dbRef = ref(scoreboardDb, 'scoreboard_layout');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) setLayout({ ...DEFAULT_SB_LAYOUT, ...data });
+    });
+    return () => unsub();
+  }, []);
+
+  function saveLayout(l) { set(ref(scoreboardDb, 'scoreboard_layout'), l).catch(() => {}); }
+
+  const bgStyle = background?.startsWith('http')
+    ? { backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : { backgroundColor: background || '#0d0d12' };
+
+  function startDrag(e, key) {
+    if (!editMode) return;
+    e.preventDefault(); e.stopPropagation();
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const el = layoutRef.current[key];
+    dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
+    draggingRef.current = key;
+  }
+  function startResize(e, key) {
+    e.preventDefault(); e.stopPropagation();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    resizeStartRef.current = { mx: cx, w: layoutRef.current[key].w };
+    resizingRef.current = key;
+  }
+  function onMove(e) {
+    const rect = containerRef.current?.getBoundingClientRect(); if (!rect) return;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    if (draggingRef.current) {
+      const key = draggingRef.current;
+      const x = Math.min(98, Math.max(0, ((cx - dragOffRef.current.x - rect.left) / rect.width) * 100));
+      const y = Math.min(97, Math.max(0, ((cy - dragOffRef.current.y - rect.top) / rect.height) * 100));
+      setLayout(l => ({ ...l, [key]: { ...l[key], x, y } }));
+    }
+    if (resizingRef.current) {
+      const key = resizingRef.current;
+      const newW = Math.max(60, resizeStartRef.current.w + (cx - resizeStartRef.current.mx));
+      setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
+    }
+  }
+  function onUp() {
+    if (draggingRef.current || resizingRef.current) saveLayout(layoutRef.current);
+    draggingRef.current = null; resizingRef.current = null;
+  }
+  function hideEl(key) { const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } }; setLayout(l); saveLayout(l); }
+  function resetLayout() { setLayout(DEFAULT_SB_LAYOUT); saveLayout(DEFAULT_SB_LAYOUT); }
+
+  function Draggable({ id, children }) {
+    const el = layout[id]; if (!el?.visible) return null;
+    return (
+      <div onMouseDown={e => startDrag(e, id)} onTouchStart={e => startDrag(e, id)}
+        style={{ position:'absolute', left:`${el.x}%`, top:`${el.y}%`, width:el.w, cursor:editMode?'grab':'default', userSelect:'none', zIndex:10, outline:editMode?'1.5px dashed rgba(250,204,21,0.55)':'none', borderRadius:6 }}>
+        {children}
+        {editMode && (<>
+          <button onMouseDown={e => { e.stopPropagation(); hideEl(id); }} style={{ position:'absolute',top:-9,right:-9,zIndex:200,width:20,height:20,borderRadius:'50%',background:'#ef4444',border:'2px solid #fff',color:'#fff',fontWeight:900,fontSize:11,cursor:'pointer',lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center' }}>✕</button>
+          <div onMouseDown={e => startResize(e, id)} onTouchStart={e => startResize(e, id)} style={{ position:'absolute',bottom:-6,right:-6,zIndex:200,width:14,height:14,borderRadius:4,background:'#facc15',border:'2px solid #fff',cursor:'se-resize' }} />
+        </>)}
+      </div>
+    );
+  }
+
+  function fs(w, base, min = 12, max = 80) { return Math.max(min, Math.min(max, (w || 110) / base)); }
+
+  const visGames = games.slice(0, maxWins * 2 - 1);
+
+  return (
+    <div ref={containerRef}
+      style={{ width:'100vw', height:'100vh', overflow:'hidden', position:'relative', ...bgStyle, fontFamily:'sans-serif' }}
+      onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
+      {background?.startsWith('http') && <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.55)' }} />}
+      <button onClick={onBack} style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
+      <div style={{ position:'absolute',top:10,right:10,zIndex:300,display:'flex',gap:8 }}>
+        {editMode && <button onClick={resetLayout} style={{ background:'rgba(239,68,68,0.85)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer' }}>重置位置</button>}
+        <button onClick={() => setEditMode(v => !v)} style={{ background:editMode?'#facc15':'rgba(0,0,0,0.45)',color:editMode?'#1e293b':'#fff',border:editMode?'none':'1px solid rgba(255,255,255,0.2)',padding:'4px 14px',borderRadius:7,fontSize:12,fontWeight:900,cursor:'pointer',opacity:editMode?1:0,transition:'opacity 0.3s' }} onMouseEnter={e=>{ if(!editMode) e.target.style.opacity=1; }} onMouseLeave={e=>{ if(!editMode) e.target.style.opacity=0; }}>{editMode?'✓ 完成':'✥ 編輯'}</button>
+      </div>
+      {editMode && <div style={{ position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',background:'rgba(250,204,21,0.9)',color:'#1e293b',padding:'5px 18px',borderRadius:18,fontSize:11,fontWeight:900,zIndex:300,pointerEvents:'none',whiteSpace:'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+
+      <Draggable id="label">
+        <div style={{ fontWeight:900, fontSize:fs(layout.label?.w||170,7,18,44), color:'rgba(255,255,255,0.9)', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{roundLabel||'八強'}</div>
+      </Draggable>
+
+      {visGames.map((g, i) => (
+        <Draggable key={`mode_${i}`} id={`mode_${i}`}>
+          {g.modeImage
+            ? <img src={g.modeImage} alt="" style={{ width:'100%', height:'auto', objectFit:'contain' }} />
+            : <div style={{ textAlign:'center', fontSize:fs(layout[`mode_${i}`]?.w||110,2.5,32,80), color:textDim, fontWeight:900 }}>?</div>
+          }
+        </Draggable>
+      ))}
+
+      {/* ── 地圖圖片（只在進行中時出現）── */}
+      {visGames.map((g, i) => (
+        g.status === 'live' ? (
+          <Draggable key={`map_${i}`} id={`map_${i}`}>
+            {g.mapImage ? (
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+                <img src={g.mapImage} alt="" style={{ width:'100%', objectFit:'cover', borderRadius:6 }} />
+                {g.mapName && <div style={{ fontSize:fs(layout[`map_${i}`]?.w||110,12,9,14), color:'rgba(255,255,255,0.6)', textAlign:'center', fontWeight:700, lineHeight:1.3 }}>{g.mapName}</div>}
+              </div>
+            ) : g.mapName ? (
+              <div style={{ fontSize:fs(layout[`map_${i}`]?.w||110,10,10,16), color:'rgba(255,255,255,0.6)', textAlign:'center', fontWeight:700 }}>{g.mapName}</div>
+            ) : <div style={{ fontSize:fs(layout[`map_${i}`]?.w||110,3,20,48), color:textDim, textAlign:'center', fontWeight:900 }}>🔴</div>}
+          </Draggable>
+        ) : null
+      ))}
+
+      <Draggable id="t1_name">
+        <div>
+          <div style={{ fontWeight:900, fontSize:fs(layout.t1_name?.w||220,10,14,36), color:'#fff', textShadow:'0 2px 12px rgba(0,0,0,0.9)', lineHeight:1.2 }}>{team1?.name||'Team 1'}</div>
+          {team1?.players && <div style={{ fontSize:fs(layout.t1_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team1.players}</div>}
+        </div>
+      </Draggable>
+
+      {visGames.map((g, i) => {
+        if (g.status === 'live') return null;
+        const won = g.status==='done' && g.s1!=null && g.s2!=null && g.s1>g.s2;
+        const elW = layout[`t1_${i}`]?.w||110;
+        return (
+          <Draggable key={`t1_${i}`} id={`t1_${i}`}>
+            <div style={{ textAlign:'center', fontWeight:900, textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>
+              {g.status==='skip'
+                ? <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>—</span>
+                : g.status==='done' && g.s1!=null
+                  ? <span style={{ fontSize:fs(elW,1.8,28,90), color:won?'#fff':textDim }}>{g.s1}</span>
+                  : <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>?</span>
+              }
+            </div>
+          </Draggable>
+        );
+      })}
+
+      <Draggable id="t1_wins">
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t1_wins?.w||100,1.5,36,110), color:winColor||'#ec4899', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{w1}</div>
+      </Draggable>
+
+      <Draggable id="t2_name">
+        <div>
+          <div style={{ fontWeight:900, fontSize:fs(layout.t2_name?.w||220,10,14,36), color:'#fff', textShadow:'0 2px 12px rgba(0,0,0,0.9)', lineHeight:1.2 }}>{team2?.name||'Team 2'}</div>
+          {team2?.players && <div style={{ fontSize:fs(layout.t2_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team2.players}</div>}
+        </div>
+      </Draggable>
+
+      {visGames.map((g, i) => {
+        if (g.status === 'live') return null;
+        const won = g.status==='done' && g.s1!=null && g.s2!=null && g.s2>g.s1;
+        const elW = layout[`t2_${i}`]?.w||110;
+        return (
+          <Draggable key={`t2_${i}`} id={`t2_${i}`}>
+            <div style={{ textAlign:'center', fontWeight:900, textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>
+              {g.status==='skip'
+                ? <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>—</span>
+                : g.status==='done' && g.s2!=null
+                  ? <span style={{ fontSize:fs(elW,1.8,28,90), color:won?'#fff':textDim }}>{g.s2}</span>
+                  : <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>?</span>
+              }
+            </div>
+          </Draggable>
+        );
+      })}
+
+      <Draggable id="t2_wins">
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t2_wins?.w||100,1.5,36,110), color:winColor||'#ec4899', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{w2}</div>
+      </Draggable>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState('home');
 
@@ -2702,14 +3189,18 @@ export default function App() {
     if (v === 'viewer')           setView('viewer');
     else if (v === 'operator')    setView('operator');
     else if (v === 'multiplayer') setView('multiplayer');
-    else if (v === 'bracket_operator') setView('bracket_operator');
-    else if (v === 'bracket_viewer')   setView('bracket_viewer');
+    else if (v === 'bracket_operator')    setView('bracket_operator');
+    else if (v === 'bracket_viewer')       setView('bracket_viewer');
+    else if (v === 'scoreboard_operator')  setView('scoreboard_operator');
+    else if (v === 'scoreboard_viewer')    setView('scoreboard_viewer');
   }, []);
 
-  if (view === 'multiplayer')      return <MultiplayerBPRoom onBack={() => setView('home')} />;
-  if (view === 'operator')         return <OperatorPanel onBack={() => setView('home')} />;
-  if (view === 'viewer')           return <ViewerView onBack={() => setView('home')} />;
-  if (view === 'bracket_operator') return <BracketOperator onBack={() => setView('home')} />;
-  if (view === 'bracket_viewer')   return <BracketViewer onBack={() => setView('home')} />;
+  if (view === 'multiplayer')       return <MultiplayerBPRoom      onBack={() => setView('home')} />;
+  if (view === 'operator')          return <OperatorPanel           onBack={() => setView('home')} />;
+  if (view === 'viewer')            return <ViewerView              onBack={() => setView('home')} />;
+  if (view === 'bracket_operator')  return <BracketOperator         onBack={() => setView('home')} />;
+  if (view === 'bracket_viewer')    return <BracketViewer           onBack={() => setView('home')} />;
+  if (view === 'scoreboard_operator') return <ScoreboardOperator   onBack={() => setView('home')} />;
+  if (view === 'scoreboard_viewer')   return <ScoreboardViewer     onBack={() => setView('home')} />;
   return <HomePage onNavigate={setView} />;
 }
