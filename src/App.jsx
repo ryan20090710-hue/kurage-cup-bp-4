@@ -575,6 +575,19 @@ function HomePage({ onNavigate }) {
                 <div className="text-white/40 text-xs mt-0.5">OBS / 轉播用畫面</div>
               </div>
             </button>
+            <button
+              onClick={() => onNavigate('lottery')}
+              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
+              style={{ backgroundColor: 'rgba(168,85,247,0.08)' }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-purple-400/10">
+                <span style={{ fontSize: 20 }}>🎰</span>
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="text-white font-black text-sm leading-tight">抽獎系統</div>
+                <div className="text-white/40 text-xs mt-0.5">閃光 / 消除 / 泡泡 抽獎</div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -820,6 +833,12 @@ function HomePage({ onNavigate }) {
           >
             <Star size={14} className="text-blue-400" />
             記分板展示
+          </button>
+          <button
+            onClick={() => onNavigate('lottery')}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
+          >
+            🎰 抽獎系統
           </button>
         </div>
       )}
@@ -3179,6 +3198,834 @@ function ScoreboardViewer({ onBack }) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 抽獎系統（6 種模式，支援 300+ 人）
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const LOTTERY_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#a855f7','#ec4899','#06b6d4','#f97316','#10b981','#6366f1'];
+
+function LotteryApp({ onBack }) {
+  const [rawText, setRawText]   = useState('');
+  const [names, setNames]       = useState([]);
+  const [pool, setPool]         = useState([]);
+  const [winCount, setWinCount] = useState(1);
+  const [mode, setMode]         = useState('flash');
+  const [phase, setPhase]       = useState('idle'); // idle | running | done
+  const [winners, setWinners]   = useState([]);
+  const [history, setHistory]   = useState([]);
+  const [removeWinners, setRemoveWinners] = useState(true);
+
+  // mode-specific display state
+  const [flashItems, setFlashItems]       = useState([]);
+  const [flashFinal, setFlashFinal]       = useState([]);
+  const [elimList, setElimList]           = useState([]);
+  const [elimGone, setElimGone]           = useState(new Set());
+  const [elimPending, setElimPending]     = useState(null);
+  const [spotlight, setSpotlight]         = useState(-1);
+  const [spotNames, setSpotNames]         = useState([]);
+  const [matrixLines, setMatrixLines]     = useState([]);
+  const [matrixWinner, setMatrixWinner]   = useState('');
+  const [gridNames, setGridNames]         = useState([]);
+  const [gridPick, setGridPick]           = useState(-1);
+  const [bubbles, setBubbles]             = useState([]);
+  const [bubbleWinners, setBubbleWinners] = useState([]);
+  const [raceFinishers, setRaceFinishers] = useState([]); // ordered array of names
+  const [raceRunning, setRaceRunning]     = useState(false);
+  const raceCanvasRef = useRef(null);
+
+  const timerRef    = useRef(null);
+  const itvRef      = useRef(null);
+  const rafRef      = useRef(null);
+  const stateRef    = useRef({});
+
+  function parseNames(text) {
+    return [...new Set(text.split(/[\n,、，]+/).map(s => s.trim()).filter(Boolean))];
+  }
+  function handleText(e) {
+    setRawText(e.target.value);
+    const p = parseNames(e.target.value);
+    setNames(p); setPool(p);
+  }
+  function stopAll() {
+    clearInterval(itvRef.current);
+    clearTimeout(timerRef.current);
+    cancelAnimationFrame(rafRef.current);
+  }
+  function doReset() {
+    stopAll();
+    setPhase('idle'); setWinners([]);
+    setFlashItems([]); setFlashFinal([]);
+    setElimList([]); setElimGone(new Set()); setElimPending(null);
+    setSpotlight(-1); setSpotNames([]);
+    setMatrixLines([]); setMatrixWinner('');
+    setGridNames([]); setGridPick(-1);
+    setBubbles([]); setBubbleWinners([]);
+    setPool([...names]);
+  }
+  function pickFrom(arr, n) {
+    const s = [...arr].sort(() => Math.random() - 0.5);
+    return s.slice(0, n);
+  }
+  function finishDraw(picked) {
+    stopAll();
+    setWinners(picked);
+    setPhase('done');
+    const ts = new Date().toLocaleTimeString();
+    setHistory(h => [...picked.map(name => ({ name, time: ts })), ...h]);
+    if (removeWinners) setPool(p => p.filter(n => !picked.includes(n)));
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 1：⚡ 閃光 – 名字快速閃爍，慢慢停下
+  // ──────────────────────────────────────────────────────────────────────────
+  function startFlash() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const picked = pickFrom(cur, winCount);
+    const show = Math.min(cur.length, Math.max(winCount * 3, 12), 30);
+    let tick = 0, total = 45 + Math.floor(Math.random() * 15);
+    setFlashFinal([]);
+    itvRef.current = setInterval(() => {
+      tick++;
+      const sample = pickFrom(cur, show);
+      setFlashItems(sample);
+      if (tick >= total) {
+        clearInterval(itvRef.current);
+        setFlashItems(picked);
+        setFlashFinal(picked);
+        finishDraw(picked);
+      }
+    }, 50 + Math.floor(tick / total * 150));
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 2：💥 消除賽 – 逐一淘汰，越到後面越慢
+  // ──────────────────────────────────────────────────────────────────────────
+  function startEliminate() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const shuffled = [...cur].sort(() => Math.random() - 0.5);
+    const picked = shuffled.slice(0, winCount);
+    const toElim = shuffled.slice(winCount);
+    setElimList(shuffled);
+    setElimGone(new Set());
+    setElimPending(null);
+    stateRef.current = { toElim, picked, idx: 0 };
+
+    function next() {
+      const { toElim, picked, idx } = stateRef.current;
+      if (idx >= toElim.length) { finishDraw(picked); return; }
+      const name = toElim[idx];
+      setElimPending(name);
+      const pct = idx / toElim.length;
+      const delay = pct < 0.5 ? 120 : pct < 0.8 ? 250 : pct < 0.95 ? 500 : 900;
+      timerRef.current = setTimeout(() => {
+        setElimGone(g => new Set([...g, name]));
+        setElimPending(null);
+        stateRef.current.idx++;
+        timerRef.current = setTimeout(next, 60);
+      }, delay);
+    }
+    timerRef.current = setTimeout(next, 300);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 3：🔦 聚光燈 – 燈光掃過名字列表
+  // ──────────────────────────────────────────────────────────────────────────
+  function startSpotlight() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const picked = pickFrom(cur, winCount);
+    const display = [...cur].sort(() => Math.random() - 0.5).slice(0, Math.min(cur.length, 40));
+    // 確保 picked 都在 display 裡
+    picked.forEach((p, i) => { if (!display.includes(p)) display[i] = p; });
+    setSpotNames(display.sort(() => Math.random() - 0.5));
+    setSpotlight(-1);
+    stateRef.current = { picked, display: display.sort(() => Math.random() - 0.5), step: 0, total: 60 + display.length };
+
+    function tick() {
+      const s = stateRef.current;
+      s.step++;
+      const pct = s.step / s.total;
+      const idx = Math.floor((pct * pct) * s.display.length) % s.display.length;
+      setSpotlight(idx);
+      const delay = 40 + pct * pct * 400;
+      if (s.step < s.total) {
+        timerRef.current = setTimeout(tick, delay);
+      } else {
+        const finalIdx = s.display.indexOf(s.picked[0]);
+        setSpotlight(finalIdx >= 0 ? finalIdx : 0);
+        timerRef.current = setTimeout(() => finishDraw(s.picked), 600);
+      }
+    }
+    timerRef.current = setTimeout(tick, 200);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 4：🌀 矩陣雨 – 綠色字符雨，最後顯示得獎者
+  // ──────────────────────────────────────────────────────────────────────────
+  function startMatrix() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const picked = pickFrom(cur, winCount);
+    const COLS = 18;
+    // 每列獨立滾動，每列顯示一個名字
+    const colNames = Array.from({ length: COLS }, () => cur[Math.floor(Math.random() * cur.length)]);
+    let tick = 0, total = 60;
+    itvRef.current = setInterval(() => {
+      tick++;
+      const pct = tick / total;
+      const lines = Array.from({ length: COLS }, (_, c) => {
+        if (pct > 0.6 && c < winCount) return picked[c];
+        return cur[Math.floor(Math.random() * cur.length)];
+      });
+      setMatrixLines(lines);
+      if (tick >= total) {
+        clearInterval(itvRef.current);
+        setMatrixLines(Array.from({ length: COLS }, (_, c) => c < winCount ? picked[c] : ''));
+        timerRef.current = setTimeout(() => finishDraw(picked), 500);
+      }
+    }, 80);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 5：🎪 九宮格輪盤 – 格子上快速跑，最後停在得獎者
+  // ──────────────────────────────────────────────────────────────────────────
+  function startGrid() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const picked = pickFrom(cur, winCount);
+    const SLOTS = 9;
+    const grid = Array.from({ length: SLOTS }, (_, i) => {
+      if (i < winCount) return picked[i];
+      return cur[Math.floor(Math.random() * cur.length)];
+    }).sort(() => Math.random() - 0.5);
+    const winnerIdx = grid.indexOf(picked[0]);
+    setGridNames(grid);
+    setGridPick(-1);
+
+    let idx = 0, tick = 0, total = 50;
+    itvRef.current = setInterval(() => {
+      tick++;
+      const pct = tick / total;
+      setGridPick(Math.floor(Math.random() * SLOTS));
+      if (tick >= total) {
+        clearInterval(itvRef.current);
+        setGridPick(winnerIdx);
+        timerRef.current = setTimeout(() => finishDraw(picked), 800);
+      }
+    }, 60 + Math.floor(tick / total * 200));
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 6：🫧 泡泡 – React state 版，不用 Canvas，不卡死
+  // ──────────────────────────────────────────────────────────────────────────
+  function startBubble() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+    const picked = pickFrom(cur, winCount);
+    const count = Math.min(cur.length, 40); // 最多 40 顆
+    const sample = [...cur].sort(() => Math.random() - 0.5).slice(0, count);
+    picked.forEach((p, i) => { if (!sample.includes(p)) sample[i] = p; });
+
+    const initial = sample.map((name, i) => ({
+      id: i, name,
+      x: 10 + Math.random() * 80,
+      y: 10 + Math.random() * 80,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      color: LOTTERY_COLORS[i % LOTTERY_COLORS.length],
+      r: 44,
+    }));
+    setBubbles(initial);
+    setBubbleWinners([]);
+    stateRef.current = { bubbles: initial, picked, tick: 0, total: 120 };
+
+    function frame() {
+      const s = stateRef.current;
+      s.tick++;
+      const decay = s.tick < s.total * 0.6 ? 0.998 : 0.97;
+      const next = s.bubbles.map(b => {
+        let x = b.x + b.vx * 0.5;
+        let y = b.y + b.vy * 0.5;
+        let vx = b.vx * decay;
+        let vy = b.vy * decay;
+        if (x < 5)  { x = 5;  vx = Math.abs(vx); }
+        if (x > 95) { x = 95; vx = -Math.abs(vx); }
+        if (y < 5)  { y = 5;  vy = Math.abs(vy); }
+        if (y > 95) { y = 95; vy = -Math.abs(vy); }
+        return { ...b, x, y, vx, vy };
+      });
+      s.bubbles = next;
+      setBubbles([...next]);
+      if (s.tick < s.total) {
+        rafRef.current = requestAnimationFrame(frame);
+      } else {
+        setBubbleWinners(s.picked);
+        timerRef.current = setTimeout(() => finishDraw(s.picked), 800);
+      }
+    }
+    rafRef.current = requestAnimationFrame(frame);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 模式 7：🏁 迷宮賽跑 – 300 個數字在迷宮裡賽跑
+  // ──────────────────────────────────────────────────────────────────────────
+  function startRace() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+
+    setRaceFinishers([]);
+    setRaceRunning(true);
+
+    // 等待 canvas mount
+    setTimeout(() => {
+      const canvas = raceCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+
+      // 迷宮牆壁：垂直牆，每道有一個缺口
+      const walls = [
+        { x: W * 0.18, gapY: H * 0.10, gapH: H * 0.25 },
+        { x: W * 0.32, gapY: H * 0.55, gapH: H * 0.25 },
+        { x: W * 0.46, gapY: H * 0.20, gapH: H * 0.30 },
+        { x: W * 0.60, gapY: H * 0.50, gapH: H * 0.30 },
+        { x: W * 0.74, gapY: H * 0.15, gapH: H * 0.28 },
+        { x: W * 0.86, gapY: H * 0.55, gapH: H * 0.28 },
+      ];
+
+      const startX = 20;
+      const finishX = W - 20;
+      const runnerR = cur.length > 200 ? 7 : cur.length > 100 ? 9 : 12;
+
+      // 初始化賽跑者
+      const runners = cur.map((name, i) => ({
+        id: i,
+        name,
+        num: i + 1,
+        x: startX + Math.random() * 40,
+        y: 20 + Math.random() * (H - 40),
+        vy: 0,
+        speed: 0.6 + Math.random() * 1.4,  // 每人速度不同
+        color: `hsl(${(i * 37) % 360}, 70%, 55%)`,
+        r: runnerR,
+        finished: false,
+        rank: 0,
+      }));
+
+      stateRef.current = { runners, walls, finishers: [], W, H, startX, finishX };
+
+      const targetFinishers = Math.min(winCount, cur.length);
+
+      function drawMaze() {
+        ctx.clearRect(0, 0, W, H);
+
+        // 背景
+        const grad = ctx.createLinearGradient(0, 0, W, 0);
+        grad.addColorStop(0, 'rgba(34,197,94,0.08)');   // 起點綠
+        grad.addColorStop(1, 'rgba(250,204,21,0.15)'); // 終點金
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+
+        // 起跑線
+        ctx.strokeStyle = 'rgba(34,197,94,0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.moveTo(startX, 0); ctx.lineTo(startX, H); ctx.stroke();
+
+        // 終點線
+        ctx.strokeStyle = '#facc15';
+        ctx.beginPath(); ctx.moveTo(finishX, 0); ctx.lineTo(finishX, H); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 終點標記
+        ctx.fillStyle = 'rgba(250,204,21,0.9)';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🏁', finishX, 14);
+
+        // 牆壁
+        walls.forEach(w => {
+          ctx.fillStyle = 'rgba(148,163,184,0.4)';
+          ctx.fillRect(w.x - 4, 0, 8, w.gapY);
+          ctx.fillRect(w.x - 4, w.gapY + w.gapH, 8, H - (w.gapY + w.gapH));
+          // 亮邊
+          ctx.fillStyle = 'rgba(148,163,184,0.8)';
+          ctx.fillRect(w.x - 4, w.gapY - 2, 8, 2);
+          ctx.fillRect(w.x - 4, w.gapY + w.gapH, 8, 2);
+        });
+      }
+
+      function drawRunners() {
+        const rs = stateRef.current.runners;
+        // 先畫普通的，再畫領先的
+        const sorted = [...rs].sort((a, b) => a.x - b.x);
+        sorted.forEach(r => {
+          const isTop3 = r.finished && r.rank <= 3;
+          const isWinner = r.finished && r.rank <= targetFinishers;
+
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, r.r, 0, 2 * Math.PI);
+          ctx.fillStyle = isTop3 ? '#facc15' : isWinner ? '#fff' : r.color;
+          ctx.fill();
+          if (isTop3) {
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = 12;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+          }
+
+          // 數字
+          ctx.fillStyle = isTop3 ? '#1e293b' : '#fff';
+          ctx.font = `bold ${Math.max(8, r.r * 0.9)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(r.num, r.x, r.y);
+        });
+      }
+
+      function stepPhysics() {
+        const s = stateRef.current;
+        const { runners, walls, W, H, finishX } = s;
+
+        for (const r of runners) {
+          if (r.finished) continue;
+
+          // 找前方最近的牆
+          const nextWall = walls.find(w => w.x > r.x - 10 && w.x < r.x + 120);
+
+          if (nextWall) {
+            const gapCy = nextWall.gapY + nextWall.gapH / 2;
+            const dy = gapCy - r.y;
+            // 距離越近越用力轉向缺口
+            const urgency = Math.max(0.02, 0.12 - Math.abs(nextWall.x - r.x) / 1200);
+            r.vy = r.vy * 0.85 + dy * urgency + (Math.random() - 0.5) * 0.8;
+          } else {
+            r.vy = r.vy * 0.92 + (Math.random() - 0.5) * 0.4;
+          }
+          r.vy = Math.max(-3.5, Math.min(3.5, r.vy));
+
+          // 嘗試移動
+          const newX = r.x + r.speed;
+          const newY = r.y + r.vy;
+
+          // 牆碰撞檢查
+          let blocked = false;
+          for (const w of walls) {
+            if (r.x < w.x && newX >= w.x - 2 && newX <= w.x + 6) {
+              // 要穿越牆的 x 範圍
+              if (newY < w.gapY || newY > w.gapY + w.gapH) {
+                blocked = true;
+                // 往缺口中心偏
+                const gapCy = w.gapY + w.gapH / 2;
+                r.vy = newY < gapCy ? 2.5 : -2.5;
+                break;
+              }
+            }
+          }
+
+          if (!blocked) r.x = newX;
+          r.y = Math.max(r.r, Math.min(H - r.r, newY));
+
+          // 抵達終點
+          if (r.x >= finishX - r.r) {
+            r.x = finishX;
+            r.finished = true;
+            r.rank = s.finishers.length + 1;
+            s.finishers.push(r.name);
+          }
+        }
+
+        // 檢查是否夠多人完賽
+        if (s.finishers.length >= targetFinishers) {
+          // 但是要等個 0.5 秒讓大家看到畫面
+          if (!s.doneTimer) {
+            s.doneTimer = setTimeout(() => {
+              const picked = s.finishers.slice(0, targetFinishers);
+              setRaceRunning(false);
+              setRaceFinishers(s.finishers);
+              finishDraw(picked);
+            }, 700);
+          }
+        }
+      }
+
+      function animate() {
+        const s = stateRef.current;
+        stepPhysics();
+        drawMaze();
+        drawRunners();
+        setRaceFinishers([...s.finishers]);
+
+        if (s.finishers.length < stateRef.current.runners.length) {
+          rafRef.current = requestAnimationFrame(animate);
+        } else {
+          // 全部抵達
+          const picked = s.finishers.slice(0, targetFinishers);
+          setRaceRunning(false);
+          finishDraw(picked);
+        }
+      }
+
+      drawMaze();
+      drawRunners();
+      rafRef.current = requestAnimationFrame(animate);
+    }, 100);
+  }
+
+  function handleStart() {
+    stopAll();
+    setPhase('running');
+    setWinners([]); setFlashFinal([]); setBubbleWinners([]);
+    if (mode === 'flash')     startFlash();
+    if (mode === 'eliminate') startEliminate();
+    if (mode === 'spotlight') startSpotlight();
+    if (mode === 'matrix')    startMatrix();
+    if (mode === 'grid')      startGrid();
+    if (mode === 'bubble')    startBubble();
+    if (mode === 'race')      startRace();
+  }
+
+  const MODES = [
+    { id:'flash',     e:'⚡', label:'閃光',   desc:'名字高速閃爍後揭曉' },
+    { id:'eliminate', e:'💥', label:'消除賽', desc:'逐一淘汰到最後' },
+    { id:'spotlight', e:'🔦', label:'聚光燈', desc:'燈光掃過名單停下' },
+    { id:'matrix',    e:'🌀', label:'矩陣雨', desc:'字符雨中浮現贏家' },
+    { id:'grid',      e:'🎪', label:'九宮格', desc:'格子輪盤停在贏家' },
+    { id:'bubble',    e:'🫧', label:'泡泡球', desc:'彩球飛舞最後金球' },
+    { id:'race',      e:'🏁', label:'迷宮賽跑', desc:'數字在迷宮賽跑前幾名得獎' },
+  ];
+
+  const dim = 'rgba(255,255,255,0.4)';
+  const cannotStart = phase === 'running' || pool.length < winCount || names.length === 0;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#0d0d1a', color:'#fff', fontFamily:'sans-serif', display:'flex', flexDirection:'column' }} translate="no">
+      <style>{`
+        *{box-sizing:border-box}
+        ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#1e293b}::-webkit-scrollbar-thumb{background:#475569;border-radius:3px}
+        @keyframes popIn{0%{transform:scale(0.3);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
+        @keyframes shimmer{0%,100%{background-position:-200% center}50%{background-position:200% center}}
+        @keyframes matrixFall{0%{transform:translateY(-20px);opacity:0}100%{transform:translateY(0);opacity:1}}
+        @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+        .winner-pop{animation:popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards}
+        .shimmer-text{background:linear-gradient(90deg,#facc15,#fff,#facc15);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 2s linear infinite}
+        .pulse-gold{animation:pulse2 0.8s ease-in-out infinite}
+        .matrix-cell{animation:matrixFall 0.1s ease-out}
+      `}</style>
+
+      {/* Header */}
+      <div style={{ background:'rgba(255,255,255,0.04)', borderBottom:'1px solid rgba(255,255,255,0.1)', padding:'12px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:dim, cursor:'pointer', fontWeight:700, fontSize:14 }}>← 首頁</button>
+        <h1 style={{ fontSize:20, fontWeight:900 }}>🎰 抽獎系統</h1>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6, flexWrap:'wrap' }}>
+          {MODES.map(m => (
+            <button key={m.id} onClick={() => { setMode(m.id); doReset(); }} style={{
+              padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'none', transition:'all 0.2s',
+              background: mode===m.id ? '#facc15' : 'rgba(255,255,255,0.08)',
+              color: mode===m.id ? '#1e293b' : 'rgba(255,255,255,0.65)',
+            }}>{m.e} {m.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+        {/* ── 左側設定 ── */}
+        <div style={{ width:250, borderRight:'1px solid rgba(255,255,255,0.08)', display:'flex', flexDirection:'column', padding:16, gap:12, overflowY:'auto', flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>名單 ({names.length} 人 / 剩 {pool.length})</div>
+            <textarea value={rawText} onChange={handleText}
+              placeholder={'每行一個名字或逗號分隔\n支援 300+ 人\n\n例：\n小明\n小花,大雄\n志玲姐姐'}
+              style={{ width:'100%', height:200, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, color:'#fff', fontSize:13, padding:10, resize:'vertical', outline:'none', lineHeight:1.7 }} />
+          </div>
+
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>抽出人數</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <button onClick={() => setWinCount(w => Math.max(1, w-1))} style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:18, fontWeight:900, cursor:'pointer' }}>−</button>
+              <input type="number" min="1" value={winCount} onChange={e => setWinCount(Math.max(1, parseInt(e.target.value)||1))}
+                style={{ width:56, textAlign:'center', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:8, color:'#fff', fontSize:18, fontWeight:900, padding:'3px 0', outline:'none' }} />
+              <button onClick={() => setWinCount(w => w+1)} style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:18, fontWeight:900, cursor:'pointer' }}>＋</button>
+            </div>
+          </div>
+
+          <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
+            <div onClick={() => setRemoveWinners(v => !v)} style={{ width:34, height:19, borderRadius:10, background:removeWinners?'#facc15':'rgba(255,255,255,0.15)', transition:'all 0.2s', position:'relative', cursor:'pointer', flexShrink:0 }}>
+              <div style={{ position:'absolute', top:2, left:removeWinners?16:2, width:15, height:15, borderRadius:'50%', background:'#fff', transition:'left 0.2s' }} />
+            </div>
+            <span style={{ fontSize:13, color:'rgba(255,255,255,0.7)' }}>抽出後移除</span>
+          </label>
+
+          <div style={{ display:'flex', gap:6 }}>
+            <button onClick={doReset} style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>↺ 重置</button>
+            <button onClick={() => { setPool([...names]); doReset(); }} style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>♻ 還原名單</button>
+          </div>
+
+          {/* 歷史 */}
+          <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', display:'flex', justifyContent:'space-between' }}>
+            <span>紀錄</span>
+            <button onClick={() => setHistory([])} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.25)', fontSize:11, cursor:'pointer' }}>清除</button>
+          </div>
+          <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
+            {history.length === 0 && <div style={{ fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center', padding:'10px 0' }}>尚無紀錄</div>}
+            {history.slice(0, 60).map((h, i) => (
+              <div key={i} style={{ background:'rgba(255,255,255,0.05)', borderRadius:8, padding:'5px 10px', borderLeft:'2px solid #facc15', fontSize:12, fontWeight:700 }}>
+                {h.name} <span style={{ fontSize:10, color:dim, fontWeight:400 }}>{h.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── 主畫面 ── */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, gap:20, position:'relative', overflow:'hidden', minWidth:0 }}>
+
+          {/* ⚡ 閃光 */}
+          {mode === 'flash' && (
+            <div style={{ width:'100%', maxWidth:700, minHeight:220, background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', padding:20, display:'flex', flexWrap:'wrap', gap:8, alignContent:'center', justifyContent:'center' }}>
+              {flashItems.length === 0 && phase==='idle' && <span style={{ color:dim, fontSize:15, fontWeight:700 }}>輸入名單後按開始</span>}
+              {flashItems.map((n, i) => {
+                const isW = flashFinal.includes(n);
+                return (
+                  <div key={n+i} style={{
+                    padding:'8px 18px', borderRadius:50, fontWeight:900, fontSize:Math.max(12, Math.min(20, 280/Math.max(flashItems.length,1))),
+                    background: isW ? 'rgba(250,204,21,0.2)' : 'rgba(255,255,255,0.07)',
+                    border: `2px solid ${isW ? '#facc15' : 'rgba(255,255,255,0.1)'}`,
+                    color: isW ? '#facc15' : '#fff',
+                    transform: isW ? 'scale(1.1)' : 'scale(1)',
+                    boxShadow: isW ? '0 0 20px rgba(250,204,21,0.4)' : 'none',
+                    transition:'all 0.15s',
+                  }}>{n}</div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 💥 消除賽 */}
+          {mode === 'eliminate' && (
+            <div style={{ width:'100%', maxWidth:820, maxHeight:'58vh', overflowY:'auto', background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', padding:20 }}>
+              {elimList.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center' }}>
+                {elimList.map((n, i) => {
+                  const gone   = elimGone.has(n);
+                  const active = elimPending === n;
+                  const win    = phase==='done' && winners.includes(n);
+                  return (
+                    <div key={n+i} style={{
+                      padding:'7px 16px', borderRadius:50, fontWeight:800, fontSize:14,
+                      background: win ? 'rgba(250,204,21,0.2)' : active ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.07)',
+                      border: `2px solid ${win?'#facc15':active?'#ef4444':'rgba(255,255,255,0.1)'}`,
+                      color: win ? '#facc15' : '#fff',
+                      opacity: gone ? 0.1 : 1,
+                      transform: active ? 'scale(1.15)' : win ? 'scale(1.08)' : gone ? 'scale(0.85)' : 'scale(1)',
+                      transition:'all 0.2s',
+                      userSelect:'none',
+                      boxShadow: win ? '0 0 20px rgba(250,204,21,0.4)' : 'none',
+                    }}>{n}</div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 🔦 聚光燈 */}
+          {mode === 'spotlight' && (
+            <div style={{ width:'100%', maxWidth:740, background:'rgba(0,0,0,0.6)', borderRadius:20, padding:20, minHeight:200, position:'relative', overflow:'hidden' }}>
+              {spotNames.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:10, justifyContent:'center' }}>
+                {spotNames.map((n, i) => {
+                  const lit = spotlight === i;
+                  const win = phase==='done' && winners.includes(n);
+                  return (
+                    <div key={n+i} style={{
+                      padding:'8px 18px', borderRadius:50, fontWeight:900, fontSize:15,
+                      background: win ? 'rgba(250,204,21,0.25)' : lit ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.04)',
+                      color: win ? '#facc15' : lit ? '#0d0d1a' : 'rgba(255,255,255,0.2)',
+                      border: `2px solid ${win?'#facc15':lit?'#fff':'rgba(255,255,255,0.06)'}`,
+                      transform: (lit||win) ? 'scale(1.12)' : 'scale(1)',
+                      boxShadow: lit ? '0 0 30px rgba(255,255,255,0.6)' : win ? '0 0 25px rgba(250,204,21,0.5)' : 'none',
+                      transition:'all 0.08s',
+                    }}>{n}</div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 🌀 矩陣雨 */}
+          {mode === 'matrix' && (
+            <div style={{ width:'100%', maxWidth:780, background:'#000', borderRadius:20, padding:'20px 12px', minHeight:240, fontFamily:'monospace' }}>
+              {matrixLines.length === 0 && phase==='idle' && <div style={{ color:'#00ff41', fontSize:14, fontWeight:700, textAlign:'center', padding:40, opacity:0.5 }}>{'> 輸入名單後按開始_'}</div>}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 10px', justifyContent:'center' }}>
+                {matrixLines.map((n, i) => {
+                  const isWin = phase==='done' && winners.includes(n);
+                  const isEmpty = !n;
+                  return (
+                    <div key={i} className={phase==='running'?'matrix-cell':''} style={{
+                      fontSize: Math.max(12, Math.min(18, 580 / Math.max(matrixLines.length, 1))),
+                      fontWeight: 900,
+                      color: isEmpty ? 'transparent' : isWin ? '#facc15' : `rgba(0,255,65,${0.4 + Math.random() * 0.6})`,
+                      textShadow: isWin ? '0 0 20px #facc15' : n ? '0 0 8px #00ff41' : 'none',
+                      padding:'2px 6px',
+                      transition:'color 0.2s',
+                    }}>{n || '.'}</div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 🎪 九宮格 */}
+          {mode === 'grid' && (
+            <div style={{ width:'100%', maxWidth:480 }}>
+              {gridNames.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
+              {gridNames.length > 0 && (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                  {gridNames.map((n, i) => {
+                    const active = gridPick === i;
+                    const win    = phase==='done' && i === gridPick;
+                    return (
+                      <div key={i} style={{
+                        background: win ? 'rgba(250,204,21,0.25)' : active ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)',
+                        border: `2px solid ${win?'#facc15':active?'#fff':'rgba(255,255,255,0.1)'}`,
+                        borderRadius:14, padding:'20px 10px', textAlign:'center',
+                        fontWeight:900, fontSize:Math.max(11,Math.min(18,140/Math.max(n.length,1))),
+                        color: win ? '#facc15' : active ? '#fff' : 'rgba(255,255,255,0.6)',
+                        transform: (active||win) ? 'scale(1.06)' : 'scale(1)',
+                        boxShadow: win ? '0 0 30px rgba(250,204,21,0.5)' : active ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
+                        transition:'all 0.08s',
+                        userSelect:'none',
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                      }}>{n}</div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 🫧 泡泡 - React DOM 版，不卡 */}
+          {mode === 'bubble' && (
+            <div style={{ width:'100%', maxWidth:600, height:360, background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', position:'relative', overflow:'hidden' }}>
+              {bubbles.length === 0 && phase==='idle' && (
+                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:dim, fontSize:15, fontWeight:700 }}>輸入名單後按開始</div>
+              )}
+              {bubbles.map(b => {
+                const isWin = bubbleWinners.includes(b.name);
+                return (
+                  <div key={b.id} className={isWin ? 'pulse-gold' : ''} style={{
+                    position:'absolute',
+                    left: `${b.x}%`, top: `${b.y}%`,
+                    width: b.r * 2, height: b.r * 2,
+                    marginLeft: -b.r, marginTop: -b.r,
+                    borderRadius:'50%',
+                    background: isWin ? '#facc15' : b.color,
+                    border: `3px solid ${isWin?'#fff':b.color}`,
+                    boxShadow: isWin ? '0 0 24px #facc15' : 'none',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontWeight:900, fontSize:Math.max(9, Math.min(15, b.r * 0.55)),
+                    color: isWin ? '#1e293b' : '#fff',
+                    overflow:'hidden',
+                    pointerEvents:'none',
+                    transition:'background 0.3s, box-shadow 0.3s',
+                  }}>
+                    <span style={{ textAlign:'center', padding:'0 4px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth: b.r * 1.8 }}>
+                      {b.name.length > 6 ? b.name.slice(0,5)+'…' : b.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 🏁 迷宮賽跑 */}
+          {mode === 'race' && (
+            <div style={{ width:'100%', maxWidth:900, display:'flex', gap:12 }}>
+              {/* Canvas 賽道 */}
+              <div style={{ flex:1, minWidth:0 }}>
+                <canvas ref={raceCanvasRef} width={720} height={440}
+                  style={{ width:'100%', height:'auto', borderRadius:16, background:'#0a0a14', border:'1px solid rgba(255,255,255,0.1)', display:'block' }} />
+                {!raceRunning && phase==='idle' && (
+                  <div style={{ textAlign:'center', marginTop:12, color:dim, fontSize:14, fontWeight:700 }}>
+                    💡 {names.length} 位參賽者 · 前 {winCount} 名獲獎
+                  </div>
+                )}
+              </div>
+
+              {/* 排行榜 */}
+              <div style={{ width:170, flexShrink:0, background:'rgba(255,255,255,0.04)', borderRadius:16, border:'1px solid rgba(255,255,255,0.08)', padding:12, maxHeight:440, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8, textAlign:'center', flexShrink:0 }}>🏆 排行榜</div>
+                <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
+                  {raceFinishers.length === 0 && phase!=='running' && (
+                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center', padding:'20px 0' }}>尚未開始</div>
+                  )}
+                  {raceFinishers.map((name, i) => {
+                    const isTop3 = i < 3;
+                    const isWin = i < winCount;
+                    const emoji = i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `${i+1}.`;
+                    return (
+                      <div key={i} style={{
+                        padding:'6px 8px', borderRadius:8,
+                        background: isWin ? 'rgba(250,204,21,0.15)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${isWin?'rgba(250,204,21,0.4)':'rgba(255,255,255,0.08)'}`,
+                        fontSize:12, fontWeight:800,
+                        color: isTop3 ? '#facc15' : isWin ? '#fff' : 'rgba(255,255,255,0.6)',
+                        display:'flex', gap:6, alignItems:'center',
+                      }}>
+                        <span style={{ fontSize: isTop3?14:11, minWidth:22 }}>{emoji}</span>
+                        <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 開始按鈕 */}
+          <button onClick={handleStart} disabled={cannotStart} style={{
+            padding:'13px 48px', borderRadius:50, fontSize:19, fontWeight:900, cursor: cannotStart?'not-allowed':'pointer', border:'none',
+            background: cannotStart ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg,#facc15,#f59e0b)',
+            color: cannotStart ? 'rgba(255,255,255,0.35)' : '#1e293b',
+            boxShadow: cannotStart ? 'none' : '0 0 40px rgba(250,204,21,0.5)',
+            transition:'all 0.2s',
+          }}>
+            {phase==='running' ? '🎰 抽獎中...' : '🎯 開始抽獎'}
+          </button>
+
+          {/* 得獎彈窗 */}
+          {phase === 'done' && winners.length > 0 && (
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.78)', backdropFilter:'blur(6px)', zIndex:50 }}
+              onClick={() => setPhase('idle')}>
+              <div className="winner-pop" onClick={e => e.stopPropagation()}
+                style={{ background:'linear-gradient(135deg,#1e1b4b,#0f172a)', border:'2px solid rgba(250,204,21,0.5)', borderRadius:28, padding:'40px 52px', textAlign:'center', boxShadow:'0 0 100px rgba(250,204,21,0.4)', maxWidth:540, width:'92%' }}>
+                <div style={{ fontSize: winners.length>1 ? 40:64, marginBottom:12 }}>🎉</div>
+                <div style={{ fontSize:12, fontWeight:700, color:'rgba(250,204,21,0.8)', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:14 }}>恭喜得獎</div>
+                {winners.length === 1 ? (
+                  <div className="shimmer-text" style={{ fontSize:'clamp(30px,6vw,58px)', fontWeight:900, marginBottom:24, letterSpacing:'-0.02em' }}>{winners[0]}</div>
+                ) : (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', marginBottom:24, maxHeight:200, overflowY:'auto' }}>
+                    {winners.map((w,i) => (
+                      <div key={i} style={{ padding:'7px 18px', borderRadius:50, background:'rgba(250,204,21,0.2)', border:'2px solid #facc15', color:'#facc15', fontWeight:900, fontSize:15 }}>{w}</div>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setPhase('idle')} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', color:'rgba(255,255,255,0.7)', padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer' }}>關閉</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState('home');
 
@@ -3193,6 +4040,7 @@ export default function App() {
     else if (v === 'bracket_viewer')       setView('bracket_viewer');
     else if (v === 'scoreboard_operator')  setView('scoreboard_operator');
     else if (v === 'scoreboard_viewer')    setView('scoreboard_viewer');
+    else if (v === 'lottery')              setView('lottery');
   }, []);
 
   if (view === 'multiplayer')       return <MultiplayerBPRoom      onBack={() => setView('home')} />;
@@ -3202,5 +4050,6 @@ export default function App() {
   if (view === 'bracket_viewer')    return <BracketViewer           onBack={() => setView('home')} />;
   if (view === 'scoreboard_operator') return <ScoreboardOperator   onBack={() => setView('home')} />;
   if (view === 'scoreboard_viewer')   return <ScoreboardViewer     onBack={() => setView('home')} />;
+  if (view === 'lottery')             return <LotteryApp           onBack={() => setView('home')} />;
   return <HomePage onNavigate={setView} />;
 }
