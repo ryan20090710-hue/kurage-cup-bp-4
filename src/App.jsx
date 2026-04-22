@@ -3232,9 +3232,24 @@ function LotteryApp({ onBack }) {
   const [gridPick, setGridPick]           = useState(-1);
   const [bubbles, setBubbles]             = useState([]);
   const [bubbleWinners, setBubbleWinners] = useState([]);
-  const [raceFinishers, setRaceFinishers] = useState([]); // ordered array of names
+  const [raceFinishers, setRaceFinishers] = useState([]);
   const [raceRunning, setRaceRunning]     = useState(false);
   const raceCanvasRef = useRef(null);
+
+  // horse mode
+  const [horses, setHorses] = useState([
+    { emoji:'🍎', name:'蘋果', color:'#ef4444', pos:0 },
+    { emoji:'🍌', name:'香蕉', color:'#eab308', pos:0 },
+    { emoji:'🍇', name:'葡萄', color:'#8b5cf6', pos:0 },
+    { emoji:'🍊', name:'橘子', color:'#f97316', pos:0 },
+    { emoji:'🍉', name:'西瓜', color:'#22c55e', pos:0 },
+  ]);
+  const [hTrack, setHTrack]   = useState(20);
+  const [hMin, setHMin]       = useState(0);
+  const [hMax, setHMax]       = useState(5);
+  const [hFinish, setHFinish] = useState([]);
+  const [hCD, setHCD]         = useState(0);
+  const hFinRef = useRef([]);
 
   const timerRef    = useRef(null);
   const itvRef      = useRef(null);
@@ -3481,7 +3496,6 @@ function LotteryApp({ onBack }) {
     setRaceFinishers([]);
     setRaceRunning(true);
 
-    // 等待 canvas mount
     setTimeout(() => {
       const canvas = raceCanvasRef.current;
       if (!canvas) return;
@@ -3489,143 +3503,277 @@ function LotteryApp({ onBack }) {
       const W = canvas.width;
       const H = canvas.height;
 
-      // 迷宮牆壁：垂直牆，每道有一個缺口
-      const walls = [
-        { x: W * 0.18, gapY: H * 0.10, gapH: H * 0.25 },
-        { x: W * 0.32, gapY: H * 0.55, gapH: H * 0.25 },
-        { x: W * 0.46, gapY: H * 0.20, gapH: H * 0.30 },
-        { x: W * 0.60, gapY: H * 0.50, gapH: H * 0.30 },
-        { x: W * 0.74, gapY: H * 0.15, gapH: H * 0.28 },
-        { x: W * 0.86, gapY: H * 0.55, gapH: H * 0.28 },
-      ];
+      // ── 隨機生成迷宮牆壁（每次不同）──
+      const WALL_COUNT = 5 + Math.floor(Math.random() * 4); // 5~8 道牆
+      const walls = [];
+      for (let i = 0; i < WALL_COUNT; i++) {
+        const xPct = 0.12 + (i / WALL_COUNT) * 0.75 + (Math.random() - 0.5) * 0.04;
+        const gapH = H * (0.15 + Math.random() * 0.18); // 缺口高度 15%~33%
+        const gapY = Math.random() * (H - gapH);
+        // 有些牆有兩個缺口（更有趣）
+        const hasTwoGaps = Math.random() > 0.65;
+        const gap2H = hasTwoGaps ? H * (0.12 + Math.random() * 0.12) : 0;
+        const gap2Y = hasTwoGaps ? Math.random() * (H - gap2H) : 0;
+        walls.push({ x: W * xPct, gapY, gapH, gap2Y, gap2H, hasTwoGaps });
+      }
 
-      const startX = 20;
-      const finishX = W - 20;
-      const runnerR = cur.length > 200 ? 7 : cur.length > 100 ? 9 : 12;
+      const startX = 30;
+      const finishX = W - 25;
+      const n = cur.length;
+      const runnerR = n > 250 ? 5 : n > 150 ? 7 : n > 80 ? 9 : n > 30 ? 11 : 13;
 
-      // 初始化賽跑者
+      // ── 初始化賽跑者（速度差異更大 → 更刺激）──
       const runners = cur.map((name, i) => ({
-        id: i,
-        name,
-        num: i + 1,
-        x: startX + Math.random() * 40,
-        y: 20 + Math.random() * (H - 40),
+        id: i, name, num: i + 1,
+        x: startX - 10 + Math.random() * 20,
+        y: runnerR + Math.random() * (H - runnerR * 2),
         vy: 0,
-        speed: 0.6 + Math.random() * 1.4,  // 每人速度不同
-        color: `hsl(${(i * 37) % 360}, 70%, 55%)`,
+        speed: 0.25 + Math.random() * 0.55,  // 降速讓賽程拉長到 ~20 秒
+        boost: 0,  // 加速 buff
+        color: `hsl(${(i * 47 + Math.random() * 20) % 360}, 72%, 58%)`,
         r: runnerR,
         finished: false,
         rank: 0,
+        trail: [],  // 軌跡
       }));
 
-      stateRef.current = { runners, walls, finishers: [], W, H, startX, finishX };
+      stateRef.current = {
+        runners, walls, finishers: [], W, H, startX, finishX,
+        frame: 0, doneTimer: null,
+        particles: [],  // 粒子特效
+        stars: Array.from({ length: 40 }, () => ({ x: Math.random()*W, y: Math.random()*H, s: 0.5+Math.random()*1.5, b: Math.random() })),
+      };
 
-      const targetFinishers = Math.min(winCount, cur.length);
+      const targetFinishers = Math.min(winCount, n);
 
-      function drawMaze() {
-        ctx.clearRect(0, 0, W, H);
+      // ── 隨機事件：每隔幾秒給隨機幾個人加速 ──
+      const boostItv = setInterval(() => {
+        const s = stateRef.current;
+        const active = s.runners.filter(r => !r.finished);
+        const lucky = Math.floor(active.length * (0.05 + Math.random() * 0.1));
+        for (let i = 0; i < lucky; i++) {
+          const r = active[Math.floor(Math.random() * active.length)];
+          if (r) r.boost = 40 + Math.floor(Math.random() * 30); // 持續 40~70 幀
+        }
+      }, 2500);
+      itvRef.current = boostItv;
 
-        // 背景
-        const grad = ctx.createLinearGradient(0, 0, W, 0);
-        grad.addColorStop(0, 'rgba(34,197,94,0.08)');   // 起點綠
-        grad.addColorStop(1, 'rgba(250,204,21,0.15)'); // 終點金
-        ctx.fillStyle = grad;
+      // ── 繪製背景與牆壁 ──
+      function drawScene() {
+        const s = stateRef.current;
+        s.frame++;
+
+        // 深色背景
+        ctx.fillStyle = '#080818';
         ctx.fillRect(0, 0, W, H);
 
-        // 起跑線
-        ctx.strokeStyle = 'rgba(34,197,94,0.5)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.moveTo(startX, 0); ctx.lineTo(startX, H); ctx.stroke();
+        // 星星背景（閃爍）
+        s.stars.forEach(st => {
+          st.b += 0.02 + Math.random() * 0.01;
+          const alpha = 0.15 + Math.abs(Math.sin(st.b)) * 0.35;
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(st.x, st.y, st.s, 0, Math.PI * 2);
+          ctx.fill();
+        });
 
-        // 終點線
-        ctx.strokeStyle = '#facc15';
-        ctx.beginPath(); ctx.moveTo(finishX, 0); ctx.lineTo(finishX, H); ctx.stroke();
+        // 起跑線（脈動）
+        const startAlpha = 0.3 + Math.sin(s.frame * 0.06) * 0.15;
+        ctx.strokeStyle = `rgba(34,197,94,${startAlpha})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath(); ctx.moveTo(startX, 0); ctx.lineTo(startX, H); ctx.stroke();
         ctx.setLineDash([]);
 
-        // 終點標記
+        // 終點線（金色脈動 + 格紋）
+        const finAlpha = 0.5 + Math.sin(s.frame * 0.08) * 0.3;
+        ctx.strokeStyle = `rgba(250,204,21,${finAlpha})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(finishX, 0); ctx.lineTo(finishX, H); ctx.stroke();
+        // 終點格紋
+        const sq = 8;
+        for (let y = 0; y < H; y += sq) {
+          for (let dx = 0; dx < 12; dx += sq) {
+            const isWhite = ((y / sq + dx / sq) % 2 === 0);
+            ctx.fillStyle = isWhite ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+            ctx.fillRect(finishX + 2 + dx, y, sq, sq);
+          }
+        }
         ctx.fillStyle = 'rgba(250,204,21,0.9)';
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = 'bold 18px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('🏁', finishX, 14);
+        ctx.fillText('🏁', finishX + 8, 20);
 
-        // 牆壁
+        // 牆壁（磚牆質感 + 缺口發光）
         walls.forEach(w => {
-          ctx.fillStyle = 'rgba(148,163,184,0.4)';
-          ctx.fillRect(w.x - 4, 0, 8, w.gapY);
-          ctx.fillRect(w.x - 4, w.gapY + w.gapH, 8, H - (w.gapY + w.gapH));
-          // 亮邊
-          ctx.fillStyle = 'rgba(148,163,184,0.8)';
-          ctx.fillRect(w.x - 4, w.gapY - 2, 8, 2);
-          ctx.fillRect(w.x - 4, w.gapY + w.gapH, 8, 2);
+          const wallW = 10;
+          // 上段牆
+          drawBrickWall(ctx, w.x - wallW/2, 0, wallW, w.gapY, s.frame);
+          // 下段牆
+          const belowY = w.gapY + w.gapH;
+          if (w.hasTwoGaps) {
+            // 中間段
+            const midEnd = w.gap2Y;
+            const midStart = belowY;
+            if (midEnd > midStart) drawBrickWall(ctx, w.x - wallW/2, midStart, wallW, midEnd - midStart, s.frame);
+            // 第二缺口下段
+            drawBrickWall(ctx, w.x - wallW/2, w.gap2Y + w.gap2H, wallW, H - (w.gap2Y + w.gap2H), s.frame);
+          } else {
+            drawBrickWall(ctx, w.x - wallW/2, belowY, wallW, H - belowY, s.frame);
+          }
+          // 缺口邊緣光暈
+          const glowAlpha = 0.3 + Math.sin(s.frame * 0.05 + w.x) * 0.15;
+          ctx.fillStyle = `rgba(59,130,246,${glowAlpha})`;
+          ctx.fillRect(w.x - wallW/2 - 2, w.gapY, wallW + 4, 3);
+          ctx.fillRect(w.x - wallW/2 - 2, w.gapY + w.gapH - 3, wallW + 4, 3);
+          if (w.hasTwoGaps) {
+            ctx.fillRect(w.x - wallW/2 - 2, w.gap2Y, wallW + 4, 3);
+            ctx.fillRect(w.x - wallW/2 - 2, w.gap2Y + w.gap2H - 3, wallW + 4, 3);
+          }
         });
+
+        // 粒子
+        s.particles = s.particles.filter(p => p.life > 0);
+        s.particles.forEach(p => {
+          p.x += p.vx; p.y += p.vy; p.life--;
+          ctx.globalAlpha = p.life / p.maxLife;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      function drawBrickWall(c, x, y, w, h, frame) {
+        if (h <= 0) return;
+        const brickH = 8, brickW = w;
+        for (let by = y; by < y + h; by += brickH) {
+          const bh = Math.min(brickH, y + h - by);
+          const shade = 0.25 + Math.sin(frame * 0.02 + by * 0.1) * 0.05;
+          c.fillStyle = `rgba(100,116,139,${shade})`;
+          c.fillRect(x, by, brickW, bh - 1);
+          c.fillStyle = 'rgba(255,255,255,0.06)';
+          c.fillRect(x, by, brickW, 1);
+        }
       }
 
       function drawRunners() {
-        const rs = stateRef.current.runners;
-        // 先畫普通的，再畫領先的
-        const sorted = [...rs].sort((a, b) => a.x - b.x);
-        sorted.forEach(r => {
-          const isTop3 = r.finished && r.rank <= 3;
-          const isWinner = r.finished && r.rank <= targetFinishers;
+        const s = stateRef.current;
+        const rs = [...s.runners].sort((a, b) => a.x - b.x);
 
+        rs.forEach(r => {
+          // 軌跡
+          if (r.trail.length > 1) {
+            ctx.strokeStyle = r.boost > 0 ? `rgba(250,204,21,0.15)` : `rgba(255,255,255,0.04)`;
+            ctx.lineWidth = r.r * 0.6;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            r.trail.forEach((pt, i) => { i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y); });
+            ctx.stroke();
+          }
+
+          const isTop = r.finished && r.rank <= 3;
+          const isWin = r.finished && r.rank <= targetFinishers;
+          const isBoosted = r.boost > 0;
+
+          // 光暈
+          if (isTop || isBoosted) {
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, r.r + 4, 0, Math.PI * 2);
+            const glow = ctx.createRadialGradient(r.x, r.y, r.r * 0.5, r.x, r.y, r.r + 6);
+            glow.addColorStop(0, isTop ? 'rgba(250,204,21,0.5)' : 'rgba(59,130,246,0.5)');
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.fill();
+          }
+
+          // 球體
           ctx.beginPath();
-          ctx.arc(r.x, r.y, r.r, 0, 2 * Math.PI);
-          ctx.fillStyle = isTop3 ? '#facc15' : isWinner ? '#fff' : r.color;
+          ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+          if (isTop) {
+            const g = ctx.createRadialGradient(r.x - r.r*0.3, r.y - r.r*0.3, 0, r.x, r.y, r.r);
+            g.addColorStop(0, '#fff');
+            g.addColorStop(0.3, '#facc15');
+            g.addColorStop(1, '#d97706');
+            ctx.fillStyle = g;
+          } else if (isBoosted) {
+            ctx.fillStyle = '#60a5fa';
+          } else {
+            ctx.fillStyle = r.color;
+          }
           ctx.fill();
-          if (isTop3) {
-            ctx.shadowColor = '#facc15';
-            ctx.shadowBlur = 12;
+          if (isTop) {
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
             ctx.stroke();
-            ctx.shadowBlur = 0;
           }
 
           // 數字
-          ctx.fillStyle = isTop3 ? '#1e293b' : '#fff';
-          ctx.font = `bold ${Math.max(8, r.r * 0.9)}px sans-serif`;
+          ctx.fillStyle = (isTop || isBoosted) ? '#1e293b' : '#fff';
+          ctx.font = `bold ${Math.max(7, r.r * 0.85)}px sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(r.num, r.x, r.y);
+
+          // 排名標記
+          if (isTop && r.finished) {
+            const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
+            ctx.font = `${r.r}px sans-serif`;
+            ctx.fillText(medal, r.x, r.y - r.r - 6);
+          }
         });
+      }
+
+      function isInGap(wall, y, r) {
+        if (y + r > wall.gapY && y - r < wall.gapY + wall.gapH) return true;
+        if (wall.hasTwoGaps && y + r > wall.gap2Y && y - r < wall.gap2Y + wall.gap2H) return true;
+        return false;
+      }
+
+      function nearestGapCenter(wall, y) {
+        const c1 = wall.gapY + wall.gapH / 2;
+        if (!wall.hasTwoGaps) return c1;
+        const c2 = wall.gap2Y + wall.gap2H / 2;
+        return Math.abs(y - c1) < Math.abs(y - c2) ? c1 : c2;
       }
 
       function stepPhysics() {
         const s = stateRef.current;
-        const { runners, walls, W, H, finishX } = s;
+        const { runners, walls, H, finishX } = s;
 
         for (const r of runners) {
           if (r.finished) continue;
 
+          // 加速 buff 倒數
+          if (r.boost > 0) r.boost--;
+          const speedMult = r.boost > 0 ? 1.8 : 1;
+
           // 找前方最近的牆
-          const nextWall = walls.find(w => w.x > r.x - 10 && w.x < r.x + 120);
+          const nextWall = walls.find(w => w.x > r.x - 8 && w.x < r.x + r.speed * 120);
 
           if (nextWall) {
-            const gapCy = nextWall.gapY + nextWall.gapH / 2;
-            const dy = gapCy - r.y;
-            // 距離越近越用力轉向缺口
-            const urgency = Math.max(0.02, 0.12 - Math.abs(nextWall.x - r.x) / 1200);
-            r.vy = r.vy * 0.85 + dy * urgency + (Math.random() - 0.5) * 0.8;
+            const gapC = nearestGapCenter(nextWall, r.y);
+            const dy = gapC - r.y;
+            const dist = Math.abs(nextWall.x - r.x);
+            const urgency = Math.max(0.015, 0.1 - dist / 1500);
+            r.vy = r.vy * 0.82 + dy * urgency + (Math.random() - 0.5) * 0.6;
           } else {
-            r.vy = r.vy * 0.92 + (Math.random() - 0.5) * 0.4;
+            r.vy = r.vy * 0.9 + (Math.random() - 0.5) * 0.3;
           }
-          r.vy = Math.max(-3.5, Math.min(3.5, r.vy));
+          r.vy = Math.max(-3, Math.min(3, r.vy));
 
-          // 嘗試移動
-          const newX = r.x + r.speed;
+          const newX = r.x + r.speed * speedMult;
           const newY = r.y + r.vy;
 
-          // 牆碰撞檢查
+          // 牆碰撞
           let blocked = false;
           for (const w of walls) {
-            if (r.x < w.x && newX >= w.x - 2 && newX <= w.x + 6) {
-              // 要穿越牆的 x 範圍
-              if (newY < w.gapY || newY > w.gapY + w.gapH) {
+            if (r.x < w.x && newX >= w.x - 5 && newX <= w.x + 8) {
+              if (!isInGap(w, newY, r.r * 0.5)) {
                 blocked = true;
-                // 往缺口中心偏
-                const gapCy = w.gapY + w.gapH / 2;
-                r.vy = newY < gapCy ? 2.5 : -2.5;
+                const gapC = nearestGapCenter(w, r.y);
+                r.vy = r.y < gapC ? 2 : -2;
                 break;
               }
             }
@@ -3634,50 +3782,107 @@ function LotteryApp({ onBack }) {
           if (!blocked) r.x = newX;
           r.y = Math.max(r.r, Math.min(H - r.r, newY));
 
+          // 軌跡（最近 8 幀）
+          r.trail.push({ x: r.x, y: r.y });
+          if (r.trail.length > 8) r.trail.shift();
+
           // 抵達終點
-          if (r.x >= finishX - r.r) {
+          if (r.x >= finishX - r.r && !r.finished) {
             r.x = finishX;
             r.finished = true;
             r.rank = s.finishers.length + 1;
             s.finishers.push(r.name);
+            // 撒花粒子
+            for (let p = 0; p < 12; p++) {
+              s.particles.push({
+                x: r.x, y: r.y,
+                vx: (Math.random() - 0.5) * 5,
+                vy: (Math.random() - 0.5) * 5,
+                life: 30 + Math.random() * 20,
+                maxLife: 50,
+                size: 2 + Math.random() * 3,
+                color: r.rank <= 3 ? '#facc15' : r.color,
+              });
+            }
           }
         }
 
-        // 檢查是否夠多人完賽
-        if (s.finishers.length >= targetFinishers) {
-          // 但是要等個 0.5 秒讓大家看到畫面
-          if (!s.doneTimer) {
-            s.doneTimer = setTimeout(() => {
-              const picked = s.finishers.slice(0, targetFinishers);
-              setRaceRunning(false);
-              setRaceFinishers(s.finishers);
-              finishDraw(picked);
-            }, 700);
-          }
+        if (s.finishers.length >= targetFinishers && !s.doneTimer) {
+          s.doneTimer = setTimeout(() => {
+            clearInterval(boostItv);
+            const picked = s.finishers.slice(0, targetFinishers);
+            setRaceRunning(false);
+            setRaceFinishers([...s.finishers]);
+            finishDraw(picked);
+          }, 1200);
         }
       }
 
       function animate() {
         const s = stateRef.current;
         stepPhysics();
-        drawMaze();
+        drawScene();
         drawRunners();
         setRaceFinishers([...s.finishers]);
 
-        if (s.finishers.length < stateRef.current.runners.length) {
+        if (s.finishers.length < s.runners.length && !s.doneTimer) {
           rafRef.current = requestAnimationFrame(animate);
-        } else {
-          // 全部抵達
+        } else if (!s.doneTimer) {
+          clearInterval(boostItv);
           const picked = s.finishers.slice(0, targetFinishers);
           setRaceRunning(false);
           finishDraw(picked);
+        } else {
+          rafRef.current = requestAnimationFrame(animate);
         }
       }
 
-      drawMaze();
+      drawScene();
       drawRunners();
       rafRef.current = requestAnimationFrame(animate);
     }, 100);
+  }
+
+  // ── 模式 8：🏇 賽馬 ──────────────────────────────────────────────────────────
+  function startHorse() {
+    setHorses(h => h.map(x => ({ ...x, pos: 0 })));
+    setHFinish([]); hFinRef.current = [];
+    setHCD(3);
+    let c = 3;
+    const cdItv = setInterval(() => {
+      c--;
+      setHCD(c);
+      if (c <= 0) {
+        clearInterval(cdItv);
+        setHCD(0);
+        // 開跑
+        itvRef.current = setInterval(() => {
+          setHorses(prev => {
+            const next = prev.map(h => {
+              if (h.pos >= hTrack) return h;
+              const step = hMin + Math.floor(Math.random() * (hMax - hMin + 1));
+              return { ...h, pos: Math.min(h.pos + step, hTrack) };
+            });
+            const nf = [...hFinRef.current];
+            next.forEach(h => {
+              if (h.pos >= hTrack && !nf.find(f => f.name === h.name))
+                nf.push({ emoji: h.emoji, name: h.name, rank: nf.length + 1 });
+            });
+            hFinRef.current = nf;
+            setHFinish([...nf]);
+            if (nf.length >= next.length) {
+              clearInterval(itvRef.current);
+              setPhase('done');
+              setWinners(nf.map(f => `${f.emoji} ${f.name}`));
+              const ts = new Date().toLocaleTimeString();
+              setHistory(hist => [{ name: `🥇${nf[0]?.emoji}${nf[0]?.name}`, time: ts }, ...hist]);
+            }
+            return next;
+          });
+        }, 1000);
+      }
+    }, 700);
+    timerRef.current = cdItv;
   }
 
   function handleStart() {
@@ -3691,6 +3896,7 @@ function LotteryApp({ onBack }) {
     if (mode === 'grid')      startGrid();
     if (mode === 'bubble')    startBubble();
     if (mode === 'race')      startRace();
+    if (mode === 'horse')     startHorse();
   }
 
   const MODES = [
@@ -3701,10 +3907,11 @@ function LotteryApp({ onBack }) {
     { id:'grid',      e:'🎪', label:'九宮格', desc:'格子輪盤停在贏家' },
     { id:'bubble',    e:'🫧', label:'泡泡球', desc:'彩球飛舞最後金球' },
     { id:'race',      e:'🏁', label:'迷宮賽跑', desc:'數字在迷宮賽跑前幾名得獎' },
+    { id:'horse',     e:'🏇', label:'賽馬', desc:'水果賽馬競速' },
   ];
 
   const dim = 'rgba(255,255,255,0.4)';
-  const cannotStart = phase === 'running' || pool.length < winCount || names.length === 0;
+  const cannotStart = phase === 'running' || (mode !== 'horse' && (pool.length < winCount || names.length === 0));
 
   return (
     <div style={{ minHeight:'100vh', background:'#0d0d1a', color:'#fff', fontFamily:'sans-serif', display:'flex', flexDirection:'column' }} translate="no">
@@ -3988,6 +4195,116 @@ function LotteryApp({ onBack }) {
             </div>
           )}
 
+          {/* 🏇 賽馬 */}
+          {mode === 'horse' && (
+            <div style={{ width:'100%', maxWidth:900, position:'relative' }}>
+              {/* 倒數 */}
+              {hCD > 0 && (
+                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', zIndex:30, background:'rgba(0,0,0,0.6)', borderRadius:20, backdropFilter:'blur(4px)' }}>
+                  <div style={{ fontSize:'clamp(72px,14vw,160px)', fontWeight:900, color:'#facc15', textShadow:'0 0 50px rgba(250,204,21,0.6)' }}>{hCD}</div>
+                </div>
+              )}
+
+              {/* 賽道 */}
+              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                {horses.map((h, hi) => {
+                  const pct = Math.min(h.pos / hTrack, 1);
+                  const isFinished = h.pos >= hTrack;
+                  const rank = hFinish.findIndex(f => f.name === h.name);
+                  const isFirst = rank === 0 && isFinished;
+                  return (
+                    <div key={hi} style={{ display:'flex', alignItems:'center', gap:8, height:'clamp(44px,7vh,64px)' }}>
+                      <div style={{ width:70, flexShrink:0, textAlign:'right', display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4 }}>
+                        {isFinished && rank >= 0 && <span style={{ fontSize:13 }}>{rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':`${rank+1}`}</span>}
+                        <span style={{ fontWeight:800, fontSize:13, color:h.color }}>{h.name}</span>
+                      </div>
+                      <div style={{ flex:1, position:'relative', height:'100%', background:`${h.color}0a`, borderRadius:10, overflow:'hidden' }}>
+                        {/* 終點線 */}
+                        <div style={{ position:'absolute', right:0, top:0, bottom:0, width:3, background:'rgba(250,204,21,0.4)' }} />
+                        {/* 進度 */}
+                        <div style={{
+                          position:'absolute', left:0, top:'18%', bottom:'18%',
+                          width:`${pct * 100}%`,
+                          background:`linear-gradient(90deg, ${h.color}10, ${h.color}35)`,
+                          borderRadius:8, transition:'width 0.5s cubic-bezier(0.34,1.56,0.64,1)',
+                        }} />
+                        {/* emoji */}
+                        <div style={{
+                          position:'absolute',
+                          left:`calc(${pct * 100}% - ${pct > 0.5 ? 28 : -2}px)`,
+                          top:'50%', transform:'translateY(-50%)',
+                          fontSize:'clamp(22px,3.5vh,36px)',
+                          transition:'left 0.5s cubic-bezier(0.34,1.56,0.64,1)',
+                          filter: isFirst ? 'drop-shadow(0 0 8px rgba(250,204,21,0.8))' : 'none',
+                          zIndex:5,
+                        }}>{h.emoji}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 賽馬設定（小型行內） */}
+              {phase === 'idle' && (
+                <div style={{ marginTop:16, background:'rgba(255,255,255,0.04)', borderRadius:14, padding:14, border:'1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center', justifyContent:'center' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontWeight:700 }}>格數</span>
+                      <input type="number" min="5" max="100" value={hTrack} onChange={e => setHTrack(Math.max(5, parseInt(e.target.value)||20))}
+                        style={{ width:52, padding:'4px 6px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontWeight:700 }}>步數</span>
+                      <input type="number" min="0" max="20" value={hMin} onChange={e => setHMin(Math.max(0, parseInt(e.target.value)||0))}
+                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                      <span style={{ color:'rgba(255,255,255,0.3)' }}>~</span>
+                      <input type="number" min="1" max="20" value={hMax} onChange={e => setHMax(Math.max(1, parseInt(e.target.value)||5))}
+                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                    </div>
+                    {horses.map((h, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:3 }}>
+                        <input type="text" value={h.emoji} onChange={e => setHorses(hs => hs.map((x,j) => j===i?{...x,emoji:e.target.value}:x))}
+                          style={{ width:32, textAlign:'center', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:6, color:'#fff', fontSize:16, padding:'2px 0', outline:'none' }} />
+                        <input type="text" value={h.name} onChange={e => setHorses(hs => hs.map((x,j) => j===i?{...x,name:e.target.value}:x))}
+                          style={{ width:50, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:6, color:'#fff', fontSize:11, fontWeight:700, padding:'4px 5px', outline:'none' }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 冠軍彈窗 */}
+              {phase === 'done' && hFinish.length > 0 && hFinish.length >= horses.length && (
+                <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.75)', backdropFilter:'blur(6px)', zIndex:50 }}
+                  onClick={() => { setPhase('idle'); setHorses(h => h.map(x => ({...x, pos:0}))); setHFinish([]); }}>
+                  <div className="winner-pop" onClick={e => e.stopPropagation()} style={{
+                    background:'linear-gradient(135deg,#1e1b4b,#0f172a)', border:'2px solid rgba(250,204,21,0.5)',
+                    borderRadius:28, padding:'36px 48px', textAlign:'center', boxShadow:'0 0 100px rgba(250,204,21,0.4)', maxWidth:420, width:'90%',
+                  }}>
+                    <div style={{ fontSize:56, marginBottom:8 }}>🏆</div>
+                    <div style={{ fontSize:12, fontWeight:700, color:'rgba(250,204,21,0.8)', letterSpacing:'0.2em', marginBottom:16 }}>比賽結果</div>
+                    {hFinish.map((f, i) => (
+                      <div key={i} style={{
+                        display:'flex', alignItems:'center', gap:10, justifyContent:'center',
+                        padding:'7px 14px', borderRadius:12, marginBottom:6,
+                        background: i===0?'rgba(250,204,21,0.18)':'rgba(255,255,255,0.04)',
+                        border:`1px solid ${i===0?'rgba(250,204,21,0.5)':'rgba(255,255,255,0.08)'}`,
+                      }}>
+                        <span style={{ fontSize:18 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`}</span>
+                        <span style={{ fontSize:22 }}>{f.emoji}</span>
+                        <span style={{ fontWeight:900, fontSize:17, color:i===0?'#facc15':'#fff' }}>{f.name}</span>
+                      </div>
+                    ))}
+                    <button onClick={() => { setPhase('idle'); setHorses(h => h.map(x => ({...x, pos:0}))); setHFinish([]); }} style={{
+                      marginTop:16, background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)',
+                      color:'rgba(255,255,255,0.7)', padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer',
+                    }}>關閉</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 開始按鈕 */}
           <button onClick={handleStart} disabled={cannotStart} style={{
             padding:'13px 48px', borderRadius:50, fontSize:19, fontWeight:900, cursor: cannotStart?'not-allowed':'pointer', border:'none',
@@ -3996,7 +4313,7 @@ function LotteryApp({ onBack }) {
             boxShadow: cannotStart ? 'none' : '0 0 40px rgba(250,204,21,0.5)',
             transition:'all 0.2s',
           }}>
-            {phase==='running' ? '🎰 抽獎中...' : '🎯 開始抽獎'}
+            {phase==='running' ? '🎰 進行中...' : mode==='horse' ? '🏇 開始賽馬！' : '🎯 開始抽獎'}
           </button>
 
           {/* 得獎彈窗 */}
