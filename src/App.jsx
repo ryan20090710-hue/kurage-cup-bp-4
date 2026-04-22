@@ -2500,7 +2500,7 @@ function BracketViewer({ onBack }) {
     <div ref={containerRef}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', ...bgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
-      {background?.startsWith('http') && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />}
+
 
       <button onClick={onBack} style={{
         position: 'absolute', top: 10, left: 10, zIndex: 300,
@@ -3100,7 +3100,7 @@ function ScoreboardViewer({ onBack }) {
     <div ref={containerRef}
       style={{ width:'100vw', height:'100vh', overflow:'hidden', position:'relative', ...bgStyle, fontFamily:'sans-serif' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
-      {background?.startsWith('http') && <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.55)' }} />}
+
       <button onClick={onBack} style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
       <div style={{ position:'absolute',top:10,right:10,zIndex:300,display:'flex',gap:8 }}>
         {editMode && <button onClick={resetLayout} style={{ background:'rgba(239,68,68,0.85)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer' }}>重置位置</button>}
@@ -3109,7 +3109,7 @@ function ScoreboardViewer({ onBack }) {
       {editMode && <div style={{ position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',background:'rgba(250,204,21,0.9)',color:'#1e293b',padding:'5px 18px',borderRadius:18,fontSize:11,fontWeight:900,zIndex:300,pointerEvents:'none',whiteSpace:'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
       <Draggable id="label">
-        <div style={{ fontWeight:900, fontSize:fs(layout.label?.w||170,7,18,44), color:'rgba(255,255,255,0.9)', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{roundLabel||'八強'}</div>
+        <div style={{ fontWeight:900, fontSize:fs(layout.label?.w||170,7,18,44), color:'rgba(255,255,255,0.9)' }}>{roundLabel||'八強'}</div>
       </Draggable>
 
       {visGames.map((g, i) => (
@@ -3139,7 +3139,7 @@ function ScoreboardViewer({ onBack }) {
 
       <Draggable id="t1_name">
         <div>
-          <div style={{ fontWeight:900, fontSize:fs(layout.t1_name?.w||220,10,14,36), color:'#fff', textShadow:'0 2px 12px rgba(0,0,0,0.9)', lineHeight:1.2 }}>{team1?.name||'Team 1'}</div>
+          <div style={{ fontWeight:900, fontSize:fs(layout.t1_name?.w||220,10,14,36), color:'#fff', lineHeight:1.2 }}>{team1?.name||'Team 1'}</div>
           {team1?.players && <div style={{ fontSize:fs(layout.t1_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team1.players}</div>}
         </div>
       </Draggable>
@@ -3150,7 +3150,7 @@ function ScoreboardViewer({ onBack }) {
         const elW = layout[`t1_${i}`]?.w||110;
         return (
           <Draggable key={`t1_${i}`} id={`t1_${i}`}>
-            <div style={{ textAlign:'center', fontWeight:900, textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>
+            <div style={{ textAlign:'center', fontWeight:900 }}>
               {g.status==='skip'
                 ? <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>—</span>
                 : g.status==='done' && g.s1!=null
@@ -3163,12 +3163,12 @@ function ScoreboardViewer({ onBack }) {
       })}
 
       <Draggable id="t1_wins">
-        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t1_wins?.w||100,1.5,36,110), color:winColor||'#ec4899', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{w1}</div>
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t1_wins?.w||100,1.5,36,110), color:winColor||'#ec4899' }}>{w1}</div>
       </Draggable>
 
       <Draggable id="t2_name">
         <div>
-          <div style={{ fontWeight:900, fontSize:fs(layout.t2_name?.w||220,10,14,36), color:'#fff', textShadow:'0 2px 12px rgba(0,0,0,0.9)', lineHeight:1.2 }}>{team2?.name||'Team 2'}</div>
+          <div style={{ fontWeight:900, fontSize:fs(layout.t2_name?.w||220,10,14,36), color:'#fff', lineHeight:1.2 }}>{team2?.name||'Team 2'}</div>
           {team2?.players && <div style={{ fontSize:fs(layout.t2_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team2.players}</div>}
         </div>
       </Draggable>
@@ -3179,7 +3179,7 @@ function ScoreboardViewer({ onBack }) {
         const elW = layout[`t2_${i}`]?.w||110;
         return (
           <Draggable key={`t2_${i}`} id={`t2_${i}`}>
-            <div style={{ textAlign:'center', fontWeight:900, textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>
+            <div style={{ textAlign:'center', fontWeight:900 }}>
               {g.status==='skip'
                 ? <span style={{ fontSize:fs(elW,3,20,64), color:textDim }}>—</span>
                 : g.status==='done' && g.s2!=null
@@ -3192,7 +3192,7 @@ function ScoreboardViewer({ onBack }) {
       })}
 
       <Draggable id="t2_wins">
-        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t2_wins?.w||100,1.5,36,110), color:winColor||'#ec4899', textShadow:'0 2px 12px rgba(0,0,0,0.9)' }}>{w2}</div>
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t2_wins?.w||100,1.5,36,110), color:winColor||'#ec4899' }}>{w2}</div>
       </Draggable>
     </div>
   );
