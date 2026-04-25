@@ -4410,9 +4410,10 @@ function LotteryApp({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const LIVE_DEFAULT = {
-  team1:    { name: 'TEAM 1', score: 0, bans: ['', '', ''] },
-  team2:    { name: 'TEAM 2', score: 0, bans: ['', '', ''] },
+  team1:    { name: 'TEAM 1', score: 0, subScore: 0, bans: ['', '', ''] },
+  team2:    { name: 'TEAM 2', score: 0, subScore: 0, bans: ['', '', ''] },
   maxWins:  3,
+  subMaxWins: 2,  // BO3 = 先到 2 小局
   bgColor:  '#ffffff',
   blueColor:'#1e88ff',
   redColor: '#ff3838',
@@ -4428,6 +4429,8 @@ const LIVE_LAYOUT_DEFAULT = {
   dots:      { x: 50, y: 2,   w: 160, visible: true },
   t2_score:  { x: 53, y: 2,   w: 70,  visible: true },
   t2_name:   { x: 60, y: 2,   w: 220, visible: true },
+  t1_subbar: { x: 30, y: 9,   w: 180, visible: true },
+  t2_subbar: { x: 60, y: 9,   w: 180, visible: true },
   t1_bans:   { x: 12, y: 12,  w: 180, visible: true },
   t2_bans:   { x: 78, y: 12,  w: 180, visible: true },
 };
@@ -4505,6 +4508,24 @@ function LiveScoreOperator({ onBack }) {
           <input type="text" value={data?.name || ''} onChange={e => update(`${team}/name`, e.target.value)}
             className="w-full p-2 border rounded-lg outline-none text-sm font-bold uppercase tracking-wider focus:border-yellow-400" />
         </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-400 mb-2">小局數（{state.subMaxWins ?? 2} 局制）</label>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <button onClick={() => update(`${team}/subScore`, Math.max(0, (data?.subScore ?? 0) - 1))}
+              className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 font-black text-xl text-slate-600 transition active:scale-95">−</button>
+            <div className="flex-1 h-6 rounded-full overflow-hidden border-2 border-slate-200 bg-slate-100 relative">
+              <div style={{
+                width: `${Math.min(100, ((data?.subScore ?? 0) / (state.subMaxWins ?? 2)) * 100)}%`,
+                height: '100%', background: color,
+                transition: 'width 0.3s',
+              }} />
+              <span className="absolute inset-0 flex items-center justify-center font-black text-sm text-slate-700 mix-blend-difference">{data?.subScore ?? 0} / {state.subMaxWins ?? 2}</span>
+            </div>
+            <button onClick={() => update(`${team}/subScore`, Math.min(state.subMaxWins ?? 2, (data?.subScore ?? 0) + 1))}
+              className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 font-black text-xl text-slate-600 transition active:scale-95">＋</button>
+          </div>
+        </div>
+
         <div className="mb-4">
           <label className="block text-xs font-bold text-slate-400 mb-2">已禁用角色（3 個）</label>
           <div className="flex gap-2">
@@ -4619,6 +4640,16 @@ function LiveScoreOperator({ onBack }) {
                     className={`flex-1 py-2 rounded-lg font-black text-sm transition border ${maxWins===n?'bg-yellow-400 text-slate-900 border-yellow-400':'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{n}</button>
                 ))}
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">小局制（先到幾勝決定一場）</label>
+              <div className="flex gap-2">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => update('subMaxWins', n)}
+                    className={`flex-1 py-2 rounded-lg font-black text-sm transition border ${(state.subMaxWins??2)===n?'bg-yellow-400 text-slate-900 border-yellow-400':'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{n}</button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">BO{(state.subMaxWins??2)*2-1}（先到 {state.subMaxWins ?? 2} 小局贏 1 場）</p>
             </div>
           </div>
         </div>
@@ -4970,6 +5001,51 @@ function LiveScoreViewer({ onBack }) {
             letterSpacing:'0.04em', textTransform:'uppercase', whiteSpace:'nowrap',
             textShadow:'0 2px 8px rgba(0,0,0,0.6)',
           }}>{team2?.name || 'TEAM 2'}</span>
+        </div>
+      </Draggable>
+
+      {/* ── 小局進度條（左隊） ── */}
+      <Draggable id="t1_subbar">
+        <div style={{ display:'flex', flexDirection:'column', gap:4, alignItems:'center' }}>
+          <div style={{
+            width:'100%',
+            height: fs(layout.t1_subbar?.w||180, 12, 8, 26),
+            background: 'rgba(255,255,255,0.85)',
+            border: `2px solid ${blueColor}`,
+            borderRadius: fs(layout.t1_subbar?.w||180, 30, 3, 8),
+            overflow:'hidden', position:'relative',
+            filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.4))',
+          }}>
+            <div style={{
+              width: `${Math.min(100, ((team1?.subScore ?? 0) / (state.subMaxWins ?? 2)) * 100)}%`,
+              height: '100%', background: blueColor,
+              transition: 'width 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+              boxShadow: `inset 0 0 ${fs(layout.t1_subbar?.w||180, 30, 3, 8)}px rgba(255,255,255,0.3)`,
+            }} />
+          </div>
+        </div>
+      </Draggable>
+
+      {/* ── 小局進度條（右隊） ── */}
+      <Draggable id="t2_subbar">
+        <div style={{ display:'flex', flexDirection:'column', gap:4, alignItems:'center' }}>
+          <div style={{
+            width:'100%',
+            height: fs(layout.t2_subbar?.w||180, 12, 8, 26),
+            background: 'rgba(255,255,255,0.85)',
+            border: `2px solid ${redColor}`,
+            borderRadius: fs(layout.t2_subbar?.w||180, 30, 3, 8),
+            overflow:'hidden', position:'relative',
+            filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.4))',
+          }}>
+            <div style={{
+              width: `${Math.min(100, ((team2?.subScore ?? 0) / (state.subMaxWins ?? 2)) * 100)}%`,
+              height: '100%', background: redColor,
+              marginLeft: 'auto',
+              transition: 'width 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+              boxShadow: `inset 0 0 ${fs(layout.t2_subbar?.w||180, 30, 3, 8)}px rgba(255,255,255,0.3)`,
+            }} />
+          </div>
         </div>
       </Draggable>
 
