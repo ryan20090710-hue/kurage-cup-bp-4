@@ -70,6 +70,20 @@ const firebaseConfig4 = {
 const app4 = initializeApp(firebaseConfig4, 'app4');
 const scoreboardDb = getDatabase(app4);
 
+// ─── Firebase App 5：Realtime Database（實況計分板） ──────────────────────────
+const firebaseConfig5 = {
+  apiKey: "AIzaSyDtPQi5baLv-qsidrvLCbsbFFfALK_S54w",
+  authDomain: "kurageee-2ea7f.firebaseapp.com",
+  databaseURL: "https://kurageee-2ea7f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kurageee-2ea7f",
+  storageBucket: "kurageee-2ea7f.firebasestorage.app",
+  messagingSenderId: "685141995057",
+  appId: "1:685141995057:web:b87f29318cbbdc304d2f10",
+  measurementId: "G-RBY60V47FR"
+};
+const app5 = initializeApp(firebaseConfig5, 'app5');
+const liveScoreDb = getDatabase(app5);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 共用資料
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -155,6 +169,7 @@ const GATE_LABELS = {
   reset:              { icon: '🔄', name: '重置 BP 房間' },
   bracket_operator:   { icon: '🏆', name: '對戰表控制台' },
   scoreboard_operator:{ icon: '🏅', name: '記分板控制台' },
+  live_operator:      { icon: '📺', name: '實況計分板控制台' },
 };
 
 function PasswordGate({ target, onSuccess, onCancel }) {
@@ -168,11 +183,14 @@ function PasswordGate({ target, onSuccess, onCancel }) {
     setTimeout(() => inputRef.current?.focus(), 50);
     const isBracket    = target === 'bracket_operator';
     const isScoreboard = target === 'scoreboard_operator';
+    const isLive       = target === 'live_operator';
     const dbRef = isBracket
       ? ref(bracketDb, 'bracket_password')
       : isScoreboard
         ? ref(scoreboardDb, 'scoreboard_password')
-        : ref(realtimeDb, 'brawl_password');
+        : isLive
+          ? ref(liveScoreDb, 'live_password')
+          : ref(realtimeDb, 'brawl_password');
     const unsub = onValue(dbRef, (snap) => {
       setCurrentPw(snap.val() ?? '1234');
     });
@@ -588,6 +606,33 @@ function HomePage({ onNavigate }) {
                 <div className="text-white/40 text-xs mt-0.5">閃光 / 消除 / 泡泡 抽獎</div>
               </div>
             </button>
+            <button
+              onClick={() => setGateTarget('live_operator')}
+              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all relative"
+              style={{ backgroundColor: 'rgba(34,197,94,0.08)' }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-400/10">
+                <span style={{ fontSize: 20 }}>📺</span>
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="text-white font-black text-sm leading-tight">實況計分板控制</div>
+                <div className="text-white/40 text-xs mt-0.5">即時對局計分（OBS 用）</div>
+              </div>
+              <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
+            </button>
+            <button
+              onClick={() => onNavigate('live_viewer')}
+              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
+              style={{ backgroundColor: 'rgba(34,197,94,0.06)' }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-400/10">
+                <span style={{ fontSize: 20 }}>📺</span>
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="text-white font-black text-sm leading-tight">實況計分板展示</div>
+                <div className="text-white/40 text-xs mt-0.5">疊加在遊戲畫面上方</div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -602,6 +647,7 @@ function HomePage({ onNavigate }) {
               if (t === 'operator') onNavigate('operator');
               if (t === 'bracket_operator') onNavigate('bracket_operator');
               if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
+              if (t === 'live_operator') onNavigate('live_operator');
             }}
             onCancel={() => setGateTarget(null)}
           />
@@ -840,6 +886,19 @@ function HomePage({ onNavigate }) {
           >
             🎰 抽獎系統
           </button>
+          <button
+            onClick={() => setGateTarget('live_operator')}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm relative"
+          >
+            📺 實況計分板控制
+            <Lock size={8} className="text-yellow-400" />
+          </button>
+          <button
+            onClick={() => onNavigate('live_viewer')}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
+          >
+            📺 實況計分板展示
+          </button>
         </div>
       )}
 
@@ -962,6 +1021,7 @@ function HomePage({ onNavigate }) {
             if (t === 'operator') onNavigate('operator');
               if (t === 'bracket_operator') onNavigate('bracket_operator');
               if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
+              if (t === 'live_operator') onNavigate('live_operator');
             if (t === 'editmode') setEditMode(true);
           }}
           onCancel={() => setGateTarget(null)}
@@ -4343,6 +4403,635 @@ function LotteryApp({ onBack }) {
   );
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 實況計分板（Brawl Stars 風格上條，OBS 用）
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const LIVE_DEFAULT = {
+  team1:    { name: 'TEAM 1', score: 0, bans: ['', '', ''] },
+  team2:    { name: 'TEAM 2', score: 0, bans: ['', '', ''] },
+  maxWins:  3,
+  bgColor:  '#ffffff',
+  blueColor:'#1e88ff',
+  redColor: '#ff3838',
+  textColor:'#1e293b',
+  scoreTextColor: '#ffffff',
+  visible: true,
+};
+
+// 每個元素的預設位置（% of viewport）和大小
+const LIVE_LAYOUT_DEFAULT = {
+  t1_name:   { x: 30, y: 2,   w: 220, visible: true },
+  t1_score:  { x: 45, y: 2,   w: 70,  visible: true },
+  dots:      { x: 50, y: 2,   w: 160, visible: true },
+  t2_score:  { x: 53, y: 2,   w: 70,  visible: true },
+  t2_name:   { x: 60, y: 2,   w: 220, visible: true },
+  t1_bans:   { x: 12, y: 12,  w: 180, visible: true },
+  t2_bans:   { x: 78, y: 12,  w: 180, visible: true },
+};
+
+function useLiveScore() {
+  const [state, setState] = useState(LIVE_DEFAULT);
+  useEffect(() => {
+    const dbRef = ref(liveScoreDb, 'live_scoreboard');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) {
+        const norm = { ...LIVE_DEFAULT, ...data };
+        // 補齊 bans 陣列（Firebase 物件正規化）
+        ['team1','team2'].forEach(t => {
+          const td = data[t] || {};
+          let bans = td.bans;
+          if (bans && !Array.isArray(bans)) bans = Object.values(bans);
+          norm[t] = { ...LIVE_DEFAULT[t], ...td, bans: Array.from({ length: 3 }, (_, i) => (bans?.[i]) || '') };
+        });
+        setState(norm);
+      } else { set(dbRef, LIVE_DEFAULT); setState(LIVE_DEFAULT); }
+    });
+    return () => unsub();
+  }, []);
+  function update(path, value) { set(ref(liveScoreDb, `live_scoreboard/${path}`), value); }
+  return [state, update];
+}
+
+// ── 控制台 ────────────────────────────────────────────────────────────────────
+function LiveScoreOperator({ onBack }) {
+  const [state, update] = useLiveScore();
+  const [showPwChange, setShowPwChange] = useState(false);
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [cfmPw, setCfmPw] = useState('');
+  const [pwMsg, setPwMsg] = useState(null);
+  const [currentPw, setCurrentPw] = useState('1234');
+  const [pickerFor, setPickerFor] = useState(null); // {team, idx}
+
+  useEffect(() => {
+    const unsub = onValue(ref(liveScoreDb, 'live_password'), snap => setCurrentPw(snap.val() ?? '1234'));
+    return () => unsub();
+  }, []);
+
+  function changePw() {
+    if (oldPw !== currentPw) return setPwMsg({ type: 'err', text: '原密碼錯誤' });
+    if (!newPw) return setPwMsg({ type: 'err', text: '新密碼不能為空' });
+    if (newPw !== cfmPw) return setPwMsg({ type: 'err', text: '兩次新密碼不符' });
+    set(ref(liveScoreDb, 'live_password'), newPw);
+    setPwMsg({ type: 'ok', text: '密碼已更新！' });
+    setOldPw(''); setNewPw(''); setCfmPw('');
+  }
+
+  function setBan(team, idx, brawlerId) {
+    const newBans = [...(state[team]?.bans || ['','',''])];
+    newBans[idx] = brawlerId;
+    set(ref(liveScoreDb, `live_scoreboard/${team}/bans`), newBans);
+    setPickerFor(null);
+  }
+
+  const maxWins = state.maxWins ?? 3;
+
+  function ScoreCtl({ team, label, color }) {
+    const data = state[team];
+    const score = data?.score ?? 0;
+    const bans = data?.bans || ['','',''];
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-black text-lg" style={{ color }}>{label}</h3>
+          <div className="w-5 h-5 rounded-full border-2 border-slate-300" style={{ background: color }} />
+        </div>
+        <div className="mb-4">
+          <label className="block text-xs font-bold text-slate-400 mb-1">隊伍名稱</label>
+          <input type="text" value={data?.name || ''} onChange={e => update(`${team}/name`, e.target.value)}
+            className="w-full p-2 border rounded-lg outline-none text-sm font-bold uppercase tracking-wider focus:border-yellow-400" />
+        </div>
+        <div className="mb-4">
+          <label className="block text-xs font-bold text-slate-400 mb-2">已禁用角色（3 個）</label>
+          <div className="flex gap-2">
+            {[0,1,2].map(i => {
+              const id = bans[i];
+              const brawler = id ? BRAWLERS.find(b => b.id === id) : null;
+              return (
+                <button key={i} onClick={() => setPickerFor({ team, idx: i })}
+                  className="flex-1 aspect-square rounded-lg border-2 border-slate-200 hover:border-yellow-400 overflow-hidden bg-slate-50 relative transition">
+                  {brawler ? (
+                    <>
+                      <img src={getPortrait(brawler)} alt={brawler.name} className="w-full h-full object-cover filter grayscale opacity-90" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <span className="text-red-400 text-3xl font-black">⊘</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-slate-300 text-2xl font-bold">＋</span>
+                  )}
+                  {brawler && (
+                    <button onClick={e => { e.stopPropagation(); setBan(team, i, ''); }}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center hover:bg-red-600">×</button>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-400 mb-2">勝場數</label>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => update(`${team}/score`, Math.max(0, score - 1))}
+              className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 font-black text-2xl text-slate-600 transition active:scale-95">−</button>
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-5xl font-black w-14 text-center" style={{ color }}>{score}</span>
+              <div className="flex gap-1">
+                {Array.from({ length: maxWins }).map((_, i) => (
+                  <div key={i} style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: i < score ? color : 'transparent',
+                    border: `2px solid ${i < score ? color : '#cbd5e1'}`,
+                  }} />
+                ))}
+              </div>
+            </div>
+            <button onClick={() => update(`${team}/score`, Math.min(maxWins, score + 1))}
+              className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 font-black text-2xl text-slate-600 transition active:scale-95">＋</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans flex flex-col">
+      <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm">
+            <Home size={16} /> 首頁
+          </button>
+          <h1 className="text-xl font-black flex items-center gap-2">📺 實況計分板控制台 🟢</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-black text-xl" style={{ color: state.blueColor }}>{state.team1?.score ?? 0}</span>
+          <span className="text-slate-300 font-bold">:</span>
+          <span className="font-black text-xl" style={{ color: state.redColor }}>{state.team2?.score ?? 0}</span>
+          <button onClick={() => set(ref(liveScoreDb, 'live_scoreboard'), { ...LIVE_DEFAULT })}
+            className="px-4 py-2 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 font-bold transition">重置</button>
+        </div>
+      </header>
+
+      <main className="flex-1 p-4 md:p-6 space-y-5 overflow-y-auto max-w-4xl mx-auto w-full">
+
+        {/* OBS 顯示 */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center justify-between">
+          <div>
+            <div className="font-black text-sm">📺 OBS 顯示</div>
+            <div className="text-xs text-slate-400 mt-1">關閉時 OBS 計分板會隱藏</div>
+          </div>
+          <button onClick={() => update('visible', !state.visible)}
+            className="relative w-14 h-8 rounded-full transition" style={{ background: state.visible ? '#22c55e' : '#cbd5e1' }}>
+            <div className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition" style={{ left: state.visible ? 28 : 4 }} />
+          </button>
+        </div>
+
+        {/* 主題色 */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-base mb-4 border-b pb-2">🎨 主題色</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              ['bgColor', '面板底色', '#ffffff'],
+              ['blueColor', '左隊（藍方）顏色', '#1e88ff'],
+              ['redColor', '右隊（紅方）顏色', '#ff3838'],
+              ['textColor', '隊名文字色', '#1e293b'],
+              ['scoreTextColor', '比分數字色', '#ffffff'],
+            ].map(([key, label, dflt]) => (
+              <div key={key}>
+                <label className="block text-xs font-bold text-slate-400 mb-1">{label}</label>
+                <div className="flex gap-2">
+                  <input type="color" value={state[key]?.startsWith('#') ? state[key] : dflt} onChange={e => update(key, e.target.value)}
+                    className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+                  <input type="text" value={state[key] || ''} onChange={e => update(key, e.target.value)}
+                    className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono min-w-0 focus:border-yellow-400" />
+                </div>
+              </div>
+            ))}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">先到幾勝</label>
+              <div className="flex gap-2">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => update('maxWins', n)}
+                    className={`flex-1 py-2 rounded-lg font-black text-sm transition border ${maxWins===n?'bg-yellow-400 text-slate-900 border-yellow-400':'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{n}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 兩隊 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <ScoreCtl team="team1" label="🔵 左隊" color={state.blueColor} />
+          <ScoreCtl team="team2" label="🔴 右隊" color={state.redColor} />
+        </div>
+
+        {/* 圓球控制 */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-base mb-4 border-b pb-2">⚪ 中間圓球位置 / 大小</h2>
+          <p className="text-xs text-slate-400 mb-4">展示頁也可以直接拖曳圓球（編輯模式）。預設不在計分板內，可獨立放任何位置。</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">X (%)</label>
+              <input type="number" min="0" max="100" value={state.dotsX ?? 50} onChange={e => update('dotsX', Number(e.target.value))}
+                className="w-full p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">Y (%)</label>
+              <input type="number" min="0" max="100" value={state.dotsY ?? 6} onChange={e => update('dotsY', Number(e.target.value))}
+                className="w-full p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">圓球大小 (px)</label>
+              <input type="number" min="8" max="80" value={state.dotsSize ?? 24} onChange={e => update('dotsSize', Number(e.target.value))}
+                className="w-full p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* 密碼 */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <button onClick={() => setShowPwChange(v => !v)}
+            className="w-full flex items-center justify-between font-bold text-sm text-slate-700">
+            <span className="flex items-center gap-2"><KeyRound size={15} className="text-yellow-500" /> 修改密碼</span>
+            <span className="text-slate-400">{showPwChange?'▲':'▼'}</span>
+          </button>
+          {showPwChange && (
+            <div className="mt-4 space-y-2">
+              {[['原密碼',oldPw,setOldPw],['新密碼',newPw,setNewPw],['確認新密碼',cfmPw,setCfmPw]].map(([label,val,fn])=>(
+                <div key={label}>
+                  <label className="block text-xs text-slate-400 mb-1">{label}</label>
+                  <input type="password" value={val} onChange={e=>{fn(e.target.value);setPwMsg(null);}} onKeyDown={e=>e.key==='Enter'&&changePw()}
+                    className="w-full p-2 border rounded-lg outline-none text-sm font-mono tracking-widest focus:border-yellow-400" />
+                </div>
+              ))}
+              {pwMsg && <p className={`text-xs font-bold ${pwMsg.type==='ok'?'text-emerald-500':'text-red-500'}`}>{pwMsg.text}</p>}
+              <button onClick={changePw} className="w-full mt-2 py-2 rounded-lg bg-yellow-400 text-slate-900 font-black text-sm hover:opacity-90">確認修改</button>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* 角色選擇器 */}
+      {pickerFor && (
+        <BrawlerPickerModal
+          onSelect={b => setBan(pickerFor.team, pickerFor.idx, b.id)}
+          onClose={() => setPickerFor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── 角色選擇 Modal（給實況計分板控制台用） ──────────────────────────────────
+function BrawlerPickerModal({ onSelect, onClose }) {
+  const [search, setSearch] = useState('');
+  const filtered = BRAWLERS.filter(b =>
+    b.name.includes(search) || getBrawlerName(b, 'en').toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div className="p-4 border-b flex items-center justify-between gap-3">
+          <h3 className="font-black text-lg">選擇禁用角色</h3>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="搜尋（中/英文）"
+            className="flex-1 max-w-xs p-2 border rounded-lg outline-none text-sm focus:border-yellow-400" autoFocus />
+          <button onClick={onClose} className="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg font-bold">關閉</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+            {filtered.map(b => (
+              <button key={b.id} onClick={() => onSelect(b)}
+                className="aspect-square rounded-lg border-2 border-slate-200 hover:border-yellow-400 overflow-hidden bg-slate-50 transition group">
+                <img src={getPortrait(b)} alt={b.name} className="w-full h-full object-cover group-hover:scale-110 transition" />
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="col-span-full text-center text-slate-400 py-8">找不到角色</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 展示畫面（OBS 用，背景透明） ─────────────────────────────────────────────
+function LiveScoreViewer({ onBack }) {
+  const [state] = useLiveScore();
+  const [layout, setLayout] = useState(LIVE_LAYOUT_DEFAULT);
+  const [editMode, setEditMode] = useState(false);
+  const draggingRef = useRef(null);
+  const resizingRef = useRef(null);
+  const dragOffRef  = useRef({ x: 0, y: 0 });
+  const resizeStartRef = useRef({ mx: 0, w: 0 });
+  const layoutRef = useRef(layout);
+  const containerRef = useRef(null);
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+
+  const { team1, team2, maxWins = 3, bgColor, blueColor, redColor, textColor, scoreTextColor, visible } = state;
+
+  useEffect(() => {
+    const dbRef = ref(liveScoreDb, 'live_layout');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) setLayout({ ...LIVE_LAYOUT_DEFAULT, ...data });
+    });
+    return () => unsub();
+  }, []);
+
+  function saveLayout(l) { set(ref(liveScoreDb, 'live_layout'), l).catch(() => {}); }
+
+  if (!visible) {
+    return (
+      <div style={{ width:'100vw', height:'100vh', background:'transparent', position:'relative' }}>
+        <button onClick={onBack} style={{
+          position:'absolute', top:14, left:14, zIndex:50,
+          background:'rgba(0,0,0,0.55)', color:'#fff', border:'none',
+          padding:'5px 14px', borderRadius:8, fontSize:13, fontWeight:700,
+          cursor:'pointer', opacity:0, transition:'opacity 0.3s',
+        }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0}>← 首頁</button>
+      </div>
+    );
+  }
+
+  const s1 = team1?.score ?? 0;
+  const s2 = team2?.score ?? 0;
+  const dots = Array.from({ length: maxWins }).map((_, i) => {
+    if (i < s1)            return 'blue';
+    if (i >= maxWins - s2) return 'red';
+    return 'empty';
+  });
+
+  function startDrag(e, key) {
+    if (!editMode) return;
+    e.preventDefault(); e.stopPropagation();
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const el = layoutRef.current[key];
+    dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
+    draggingRef.current = key;
+  }
+  function startResize(e, key) {
+    e.preventDefault(); e.stopPropagation();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    resizeStartRef.current = { mx: cx, w: layoutRef.current[key].w };
+    resizingRef.current = key;
+  }
+  function onMove(e) {
+    const rect = containerRef.current?.getBoundingClientRect(); if (!rect) return;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    if (draggingRef.current) {
+      const key = draggingRef.current;
+      const x = Math.min(98, Math.max(0, ((cx - dragOffRef.current.x - rect.left) / rect.width) * 100));
+      const y = Math.min(97, Math.max(0, ((cy - dragOffRef.current.y - rect.top) / rect.height) * 100));
+      setLayout(l => ({ ...l, [key]: { ...l[key], x, y } }));
+    }
+    if (resizingRef.current) {
+      const key = resizingRef.current;
+      const dx = cx - resizeStartRef.current.mx;
+      const newW = Math.max(50, resizeStartRef.current.w + dx);
+      setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
+    }
+  }
+  function onUp() {
+    if (draggingRef.current || resizingRef.current) saveLayout(layoutRef.current);
+    draggingRef.current = null; resizingRef.current = null;
+  }
+  function hideEl(key) {
+    const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
+    setLayout(l); saveLayout(l);
+  }
+  function resetLayout() { setLayout(LIVE_LAYOUT_DEFAULT); saveLayout(LIVE_LAYOUT_DEFAULT); }
+  function showAll() {
+    const l = { ...layoutRef.current };
+    Object.keys(l).forEach(k => { l[k] = { ...l[k], visible: true }; });
+    setLayout(l); saveLayout(l);
+  }
+
+  function Draggable({ id, children }) {
+    const el = layout[id]; if (!el?.visible) return null;
+    return (
+      <div onMouseDown={e => startDrag(e, id)} onTouchStart={e => startDrag(e, id)}
+        style={{
+          position:'absolute', left:`${el.x}%`, top:`${el.y}%`, width:el.w,
+          cursor: editMode ? 'grab' : 'default', userSelect:'none', zIndex:10,
+          outline: editMode ? '1.5px dashed rgba(250,204,21,0.6)' : 'none',
+          borderRadius: 6,
+        }}>
+        {children}
+        {editMode && (
+          <>
+            <button onMouseDown={e => { e.stopPropagation(); hideEl(id); }}
+              style={{
+                position:'absolute', top:-9, right:-9, zIndex:200,
+                width:20, height:20, borderRadius:'50%', background:'#ef4444', border:'2px solid #fff',
+                color:'#fff', fontWeight:900, fontSize:11, cursor:'pointer', lineHeight:1, padding:0,
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>✕</button>
+            <div onMouseDown={e => startResize(e, id)} onTouchStart={e => startResize(e, id)}
+              style={{
+                position:'absolute', bottom:-6, right:-6, zIndex:200,
+                width:14, height:14, borderRadius:4, background:'#facc15', border:'2px solid #fff',
+                cursor:'se-resize',
+              }} />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function fs(w, base, min = 12, max = 80) { return Math.max(min, Math.min(max, w / base)); }
+
+  return (
+    <div ref={containerRef}
+      style={{ width:'100vw', height:'100vh', background:'transparent', position:'relative', fontFamily:'sans-serif' }}
+      onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
+
+      <button onClick={onBack} style={{
+        position:'absolute', top:14, left:14, zIndex:300,
+        background:'rgba(0,0,0,0.55)', color:'#fff', border:'none',
+        padding:'5px 14px', borderRadius:8, fontSize:13, fontWeight:700,
+        cursor:'pointer', opacity:0, transition:'opacity 0.3s',
+      }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0}>← 首頁</button>
+
+      <div style={{ position:'absolute', top:14, right:14, zIndex:300, display:'flex', gap:8 }}>
+        {editMode && (
+          <>
+            <button onClick={showAll} style={{
+              background:'rgba(34,197,94,0.85)', color:'#fff', border:'none',
+              padding:'4px 12px', borderRadius:7, fontSize:12, fontWeight:700, cursor:'pointer',
+            }}>顯示全部</button>
+            <button onClick={resetLayout} style={{
+              background:'rgba(239,68,68,0.85)', color:'#fff', border:'none',
+              padding:'4px 12px', borderRadius:7, fontSize:12, fontWeight:700, cursor:'pointer',
+            }}>重置位置</button>
+          </>
+        )}
+        <button onClick={() => setEditMode(v => !v)} style={{
+          background: editMode ? '#facc15' : 'rgba(0,0,0,0.45)',
+          color: editMode ? '#1e293b' : '#fff',
+          border: editMode ? 'none' : '1px solid rgba(255,255,255,0.2)',
+          padding:'4px 14px', borderRadius:7, fontSize:12, fontWeight:900,
+          cursor:'pointer', opacity: editMode ? 1 : 0, transition:'opacity 0.3s',
+        }} onMouseEnter={e => { if (!editMode) e.target.style.opacity = 1; }}
+           onMouseLeave={e => { if (!editMode) e.target.style.opacity = 0; }}>
+          {editMode ? '✓ 完成' : '✥ 編輯'}
+        </button>
+      </div>
+      {editMode && (
+        <div style={{
+          position:'absolute', bottom:14, left:'50%', transform:'translateX(-50%)',
+          background:'rgba(250,204,21,0.9)', color:'#1e293b',
+          padding:'5px 18px', borderRadius:18, fontSize:11, fontWeight:900,
+          zIndex:300, pointerEvents:'none', whiteSpace:'nowrap',
+        }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」「顯示全部」</div>
+      )}
+
+      <Draggable id="t1_name">
+        <div style={{
+          padding: `${fs(layout.t1_name?.w||220, 18, 8, 24)}px ${fs(layout.t1_name?.w||220, 8, 14, 44)}px`,
+          textAlign:'right',
+        }}>
+          <span style={{
+            fontWeight:900, fontSize:fs(layout.t1_name?.w||220, 9, 14, 36),
+            color: textColor || '#1e293b',
+            letterSpacing:'0.04em', textTransform:'uppercase', whiteSpace:'nowrap',
+            textShadow:'0 2px 8px rgba(0,0,0,0.6)',
+          }}>{team1?.name || 'TEAM 1'}</span>
+        </div>
+      </Draggable>
+
+      <Draggable id="t1_score">
+        <div style={{
+          padding: `${fs(layout.t1_score?.w||70, 5, 10, 28)}px 0`,
+          textAlign:'center',
+          fontWeight:900, fontSize:fs(layout.t1_score?.w||70, 1.8, 28, 100),
+          fontVariantNumeric:'tabular-nums', lineHeight:1,
+          color: blueColor,
+          textShadow:'0 2px 12px rgba(0,0,0,0.7)',
+        }}>{s1}</div>
+      </Draggable>
+
+      <Draggable id="dots">
+        <div style={{
+          background:'#000', borderRadius:fs(layout.dots?.w||160, 4, 16, 50),
+          padding: `${fs(layout.dots?.w||160, 16, 6, 18)}px ${fs(layout.dots?.w||160, 10, 10, 28)}px`,
+          display:'flex', justifyContent:'center', alignItems:'center',
+          gap: fs(layout.dots?.w||160, 12, 6, 18),
+          filter:'drop-shadow(0 4px 12px rgba(0,0,0,0.4))',
+        }}>
+          {dots.map((d, i) => {
+            const color = d === 'blue' ? blueColor : d === 'red' ? redColor : '#3a3a3a';
+            const r = fs(layout.dots?.w||160, 6, 14, 40);
+            return (
+              <div key={i} style={{
+                width:r, height:r, borderRadius:'50%',
+                background: d === 'empty' ? 'transparent' : color,
+                border: `${Math.max(2, r*0.13)}px solid ${d==='empty' ? '#666' : color}`,
+                boxShadow: d !== 'empty' ? `0 0 ${r/2}px ${color}88, inset 0 0 ${r/4}px rgba(255,255,255,0.3)` : 'none',
+                transition:'all 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+                position:'relative', flexShrink:0,
+              }}>
+                {d !== 'empty' && (
+                  <div style={{
+                    position:'absolute', top:'25%', left:'25%', width:'30%', height:'30%',
+                    borderRadius:'50%', background:'rgba(255,255,255,0.5)',
+                  }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Draggable>
+
+      <Draggable id="t2_score">
+        <div style={{
+          padding: `${fs(layout.t2_score?.w||70, 5, 10, 28)}px 0`,
+          textAlign:'center',
+          fontWeight:900, fontSize:fs(layout.t2_score?.w||70, 1.8, 28, 100),
+          fontVariantNumeric:'tabular-nums', lineHeight:1,
+          color: redColor,
+          textShadow:'0 2px 12px rgba(0,0,0,0.7)',
+        }}>{s2}</div>
+      </Draggable>
+
+      <Draggable id="t2_name">
+        <div style={{
+          padding: `${fs(layout.t2_name?.w||220, 18, 8, 24)}px ${fs(layout.t2_name?.w||220, 8, 14, 44)}px`,
+          textAlign:'left',
+        }}>
+          <span style={{
+            fontWeight:900, fontSize:fs(layout.t2_name?.w||220, 9, 14, 36),
+            color: textColor || '#1e293b',
+            letterSpacing:'0.04em', textTransform:'uppercase', whiteSpace:'nowrap',
+            textShadow:'0 2px 8px rgba(0,0,0,0.6)',
+          }}>{team2?.name || 'TEAM 2'}</span>
+        </div>
+      </Draggable>
+
+      <Draggable id="t1_bans">
+        <div style={{ display:'flex', gap:fs(layout.t1_bans?.w||180, 30, 4, 10), justifyContent:'center' }}>
+          {[0,1,2].map(i => {
+            const id = team1?.bans?.[i];
+            const brawler = id ? BRAWLERS.find(b => b.id === id) : null;
+            const sz = fs(layout.t1_bans?.w||180, 4, 28, 80);
+            return (
+              <div key={i} style={{
+                width:sz, height:sz, borderRadius:6,
+                border: `${Math.max(2, sz*0.06)}px solid ${blueColor}`,
+                background: brawler ? '#222' : 'rgba(0,0,0,0.4)',
+                overflow:'hidden', position:'relative', flexShrink:0,
+                filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.5))',
+              }}>
+                {brawler && (
+                  <>
+                    <img src={getPortrait(brawler)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', filter:'grayscale(100%) brightness(0.7)' }} />
+                    <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <span style={{ color:'#ff3838', fontSize:sz*0.7, fontWeight:900, textShadow:'0 0 4px rgba(0,0,0,0.8)', lineHeight:1 }}>⊘</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Draggable>
+
+      <Draggable id="t2_bans">
+        <div style={{ display:'flex', gap:fs(layout.t2_bans?.w||180, 30, 4, 10), justifyContent:'center' }}>
+          {[0,1,2].map(i => {
+            const id = team2?.bans?.[i];
+            const brawler = id ? BRAWLERS.find(b => b.id === id) : null;
+            const sz = fs(layout.t2_bans?.w||180, 4, 28, 80);
+            return (
+              <div key={i} style={{
+                width:sz, height:sz, borderRadius:6,
+                border: `${Math.max(2, sz*0.06)}px solid ${redColor}`,
+                background: brawler ? '#222' : 'rgba(0,0,0,0.4)',
+                overflow:'hidden', position:'relative', flexShrink:0,
+                filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.5))',
+              }}>
+                {brawler && (
+                  <>
+                    <img src={getPortrait(brawler)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', filter:'grayscale(100%) brightness(0.7)' }} />
+                    <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <span style={{ color:'#ff3838', fontSize:sz*0.7, fontWeight:900, textShadow:'0 0 4px rgba(0,0,0,0.8)', lineHeight:1 }}>⊘</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Draggable>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState('home');
 
@@ -4358,6 +5047,8 @@ export default function App() {
     else if (v === 'scoreboard_operator')  setView('scoreboard_operator');
     else if (v === 'scoreboard_viewer')    setView('scoreboard_viewer');
     else if (v === 'lottery')              setView('lottery');
+    else if (v === 'live_operator')        setView('live_operator');
+    else if (v === 'live_viewer')          setView('live_viewer');
   }, []);
 
   if (view === 'multiplayer')       return <MultiplayerBPRoom      onBack={() => setView('home')} />;
@@ -4368,5 +5059,7 @@ export default function App() {
   if (view === 'scoreboard_operator') return <ScoreboardOperator   onBack={() => setView('home')} />;
   if (view === 'scoreboard_viewer')   return <ScoreboardViewer     onBack={() => setView('home')} />;
   if (view === 'lottery')             return <LotteryApp           onBack={() => setView('home')} />;
+  if (view === 'live_operator')       return <LiveScoreOperator    onBack={() => setView('home')} />;
+  if (view === 'live_viewer')         return <LiveScoreViewer      onBack={() => setView('home')} />;
   return <HomePage onNavigate={setView} />;
 }
