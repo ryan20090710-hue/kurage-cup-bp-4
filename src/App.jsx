@@ -122,7 +122,7 @@ const BRAWLERS = [
   { id: 'juju', name: '茱茱', rarity: 'mythic' }, { id: 'ollie', name: '奧利', rarity: 'mythic' }, { id: 'lumi', name: '露米', rarity: 'mythic' },
   { id: 'finx', name: '芬克斯', rarity: 'mythic' }, { id: 'Jaeyoug', name: '載勇', rarity: 'mythic' }, { id: 'Alli', name: '愛莉', rarity: 'mythic' },
   { id: 'Mina', name: '蜜娜', rarity: 'mythic' }, { id: 'Ziggy', name: '茲奇', rarity: 'mythic' }, { id: 'Gigi', name: '琪琪', rarity: 'mythic' },
-  { id: 'Glowy', name: '格魯伊', rarity: 'mythic' }, { id: 'najia', name: '娜吉亞', rarity: 'mythic' },
+  { id: 'Glowy', name: '格魯伊', rarity: 'mythic' }, { id: 'najia', name: '娜吉亞', rarity: 'mythic' }, { id: 'damian', name: '達米安', rarity: 'mythic' },
   { id: 'spike', name: '史派克', rarity: 'legendary' }, { id: 'crow', name: '鴉', rarity: 'legendary' }, { id: 'leon', name: '里昂', rarity: 'legendary' },
   { id: 'sandy', name: '沙迪', rarity: 'legendary' }, { id: 'amber', name: '安珀', rarity: 'legendary' }, { id: 'meg', name: '梅格', rarity: 'legendary' },
   { id: 'surge', name: '奔騰', rarity: 'legendary' }, { id: 'chester', name: '查斯特', rarity: 'legendary' },
