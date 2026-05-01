@@ -3,7 +3,7 @@ import {
   Search, RotateCcw, ShieldX, Check, Star, Users, User,
   ArrowRightLeft, EyeOff, Eye, Globe, MonitorPlay, Settings,
   Image as ImageIcon, X, Trash2, Home, Palette, AlignJustify, Grid3x3,
-  GripVertical, ChevronUp, ChevronDown, Lock, KeyRound, Trophy
+  GripVertical, ChevronUp, ChevronDown, Lock, KeyRound, Trophy, Sun, Moon
 } from 'lucide-react';
 
 // ─── Firebase 套件 ────────────────────────────────────────────────────────────
@@ -141,6 +141,80 @@ const RARITY_BG = {
   'ultra_legendary': 'bg-gradient-to-br from-violet-600 via-fuchsia-500 to-rose-500 text-white shadow-[inset_0_0_10px_rgba(255,255,255,0.4)] relative overflow-hidden ring-1 ring-fuchsia-300',
 };
 
+const THEME_STORAGE_KEY = 'kurage-theme';
+const THEME_TOKENS = {
+  dark: {
+    name: 'dark',
+    pageBg: '#0d0d1a',
+    homeDefaultBg: '#020617',
+    panelBg: '#0f172a',
+    panelBgStrong: '#020617',
+    cardBg: 'rgba(255,255,255,0.055)',
+    cardBgHover: 'rgba(255,255,255,0.09)',
+    subtleBg: 'rgba(255,255,255,0.04)',
+    inputBg: 'rgba(255,255,255,0.08)',
+    overlay: 'rgba(0,0,0,0.72)',
+    text: '#ffffff',
+    textStrong: '#ffffff',
+    mutedText: 'rgba(255,255,255,0.58)',
+    faintText: 'rgba(255,255,255,0.35)',
+    border: 'rgba(255,255,255,0.1)',
+    borderStrong: 'rgba(255,255,255,0.18)',
+    canvasBg: '#0a0a14',
+    canvasTop: '#111827',
+    canvasMid: '#0f172a',
+    canvasBottom: '#020617',
+    scrollTrack: '#1e293b',
+    scrollThumb: '#475569',
+    shadow: '0 18px 50px rgba(0,0,0,0.28)',
+    modalBg: 'linear-gradient(135deg,#1e1b4b,#0f172a)',
+  },
+  light: {
+    name: 'light',
+    pageBg: '#f6f8fc',
+    homeDefaultBg: '#eef3fb',
+    panelBg: '#ffffff',
+    panelBgStrong: '#f8fafc',
+    cardBg: 'rgba(255,255,255,0.82)',
+    cardBgHover: 'rgba(255,255,255,0.96)',
+    subtleBg: 'rgba(15,23,42,0.045)',
+    inputBg: '#ffffff',
+    overlay: 'rgba(15,23,42,0.24)',
+    text: '#0f172a',
+    textStrong: '#020617',
+    mutedText: 'rgba(15,23,42,0.62)',
+    faintText: 'rgba(15,23,42,0.38)',
+    border: 'rgba(15,23,42,0.12)',
+    borderStrong: 'rgba(15,23,42,0.2)',
+    canvasBg: '#eef3ff',
+    canvasTop: '#f8fafc',
+    canvasMid: '#e0f2fe',
+    canvasBottom: '#dbeafe',
+    scrollTrack: '#e2e8f0',
+    scrollThumb: '#94a3b8',
+    shadow: '0 18px 45px rgba(15,23,42,0.12)',
+    modalBg: 'linear-gradient(135deg,#ffffff,#eef3fb)',
+  },
+};
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+  const stored = window.localStorage?.getItem(THEME_STORAGE_KEY);
+  return stored === 'light' || stored === 'dark' ? stored : 'dark';
+}
+
+function getThemeTokens(theme) {
+  return THEME_TOKENS[theme] ?? THEME_TOKENS.dark;
+}
+
+const GLOBAL_THEME_CSS = `
+  .kurage-app-theme{min-height:100vh;background:var(--kurage-page-bg);color:var(--kurage-text);transition:background-color .2s,color .2s}
+  .kurage-app-theme[data-theme="light"] .kurage-control-bg{background:#f6f8fc!important;color:#0f172a!important}
+  .kurage-app-theme[data-theme="light"] .kurage-control-surface{background:#fff!important;border-color:rgba(15,23,42,.12)!important;color:#0f172a!important}
+  .kurage-app-theme[data-theme="light"] .kurage-control-muted{color:rgba(15,23,42,.58)!important}
+  .kurage-app-theme[data-theme="light"] .kurage-floating-control{background:rgba(255,255,255,.88)!important;color:#0f172a!important;border:1px solid rgba(15,23,42,.14)!important;box-shadow:0 10px 30px rgba(15,23,42,.12)}
+`;
+
 // ─── 雲端同步 Hook（Realtime Database）── 所有元件共用 ───────────────────────
 function useFirebaseState(key, initialValue, db = realtimeDb) {
   const initialValueRef = useRef(initialValue);
@@ -190,12 +264,13 @@ const GATE_LABELS = {
   live_operator:      { icon: '📺', name: '實況計分板控制台' },
 };
 
-function PasswordGate({ target, onSuccess, onCancel }) {
+function PasswordGate({ target, onSuccess, onCancel, themeTokens = THEME_TOKENS.dark }) {
   const [input, setInput]   = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError]   = useState(false);
   const [currentPw, setCurrentPw] = useState(null);
   const inputRef = useRef(null);
+  const ui = themeTokens;
 
   useEffect(() => {
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50);
@@ -227,14 +302,14 @@ function PasswordGate({ target, onSuccess, onCancel }) {
   const { icon, name } = GATE_LABELS[target] || {};
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm">
-      <div className="bg-[#0f172a] border border-slate-700 rounded-3xl p-8 w-full max-w-xs shadow-2xl mx-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm" style={{ background: ui.overlay }}>
+      <div className="rounded-3xl p-8 w-full max-w-xs shadow-2xl mx-4" style={{ background: ui.panelBg, border: `1px solid ${ui.border}`, color: ui.text }}>
         <div className="text-center mb-6">
           <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center mx-auto mb-4">
             <Lock size={28} className="text-yellow-400" />
           </div>
-          <h2 className="text-xl font-black text-white">需要密碼</h2>
-          <p className="text-slate-400 text-sm mt-1">{icon} {name}</p>
+          <h2 className="text-xl font-black" style={{ color: ui.textStrong }}>需要密碼</h2>
+          <p className="text-sm mt-1" style={{ color: ui.mutedText }}>{icon} {name}</p>
         </div>
 
         <div className="relative mb-3">
@@ -245,13 +320,15 @@ function PasswordGate({ target, onSuccess, onCancel }) {
             onChange={e => { setInput(e.target.value); setError(false); }}
             onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             placeholder="輸入密碼"
-            className={`w-full bg-slate-800 text-white px-4 py-3 pr-12 rounded-xl border text-center text-xl font-mono tracking-[0.4em] focus:outline-none transition
-              ${error ? 'border-red-500 ring-1 ring-red-500 animate-pulse' : 'border-slate-600 focus:border-yellow-400'}`}
+            className={`w-full px-4 py-3 pr-12 rounded-xl border text-center text-xl font-mono tracking-[0.4em] focus:outline-none transition
+              ${error ? 'border-red-500 ring-1 ring-red-500 animate-pulse' : 'focus:border-yellow-400'}`}
+            style={{ background: ui.inputBg, color: ui.text, borderColor: error ? '#ef4444' : ui.borderStrong }}
           />
           <button
             onMouseDown={e => e.preventDefault()}
             onClick={() => setShowPw(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+            className="absolute right-3 top-1/2 -translate-y-1/2 transition"
+            style={{ color: ui.mutedText }}
           >
             {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -262,7 +339,7 @@ function PasswordGate({ target, onSuccess, onCancel }) {
         )}
 
         <div className="flex gap-3 mt-5">
-          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold border border-slate-600 hover:border-slate-400 transition">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl font-bold border transition" style={{ background: ui.subtleBg, color: ui.mutedText, borderColor: ui.border }}>
             取消
           </button>
           <button onClick={handleSubmit} disabled={currentPw === null}
@@ -276,13 +353,14 @@ function PasswordGate({ target, onSuccess, onCancel }) {
 }
 
 // ── 修改密碼區塊（用在設定面板內） ──
-function ChangePasswordSection({ accentColor }) {
+function ChangePasswordSection({ accentColor, themeTokens = THEME_TOKENS.dark }) {
   const [oldPw, setOldPw]         = useState('');
   const [newPw, setNewPw]         = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [msg, setMsg]             = useState(null);
   const [show, setShow]           = useState(false);
   const [currentPw, setCurrentPw] = useState(null);
+  const ui = themeTokens;
 
   useEffect(() => {
     const dbRef = ref(realtimeDb, 'brawl_password');
@@ -307,27 +385,29 @@ function ChangePasswordSection({ accentColor }) {
     <section>
       <button
         onClick={() => { setShow(v => !v); setMsg(null); }}
-        className="w-full flex items-center justify-between py-2 text-slate-300 font-bold text-sm"
+        className="w-full flex items-center justify-between py-2 font-bold text-sm"
+        style={{ color: ui.mutedText }}
       >
         <span className="flex items-center gap-2"><KeyRound size={15} className="text-yellow-400" /> 修改密碼</span>
-        <span className="text-slate-500 text-xs">{show ? '▲ 收起' : '▼ 展開'}</span>
+        <span className="text-xs" style={{ color: ui.faintText }}>{show ? '▲ 收起' : '▼ 展開'}</span>
       </button>
 
       {show && (
-        <div className="mt-3 space-y-2 bg-slate-800/60 rounded-xl p-4 border border-slate-700">
+        <div className="mt-3 space-y-2 rounded-xl p-4 border" style={{ background: ui.subtleBg, borderColor: ui.border }}>
           {[
             { label: '原密碼', value: oldPw, set: setOldPw },
             { label: '新密碼', value: newPw, set: setNewPw },
             { label: '確認新密碼', value: confirmPw, set: setConfirmPw },
           ].map(({ label, value, set }) => (
             <div key={label}>
-              <label className="block text-slate-400 text-xs mb-1">{label}</label>
+              <label className="block text-xs mb-1" style={{ color: ui.mutedText }}>{label}</label>
               <input
                 type="password"
                 value={value}
                 onChange={e => { set(e.target.value); setMsg(null); }}
                 onKeyDown={e => e.key === 'Enter' && handleChange()}
-                className="w-full bg-slate-900 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 font-mono tracking-widest text-sm"
+                className="w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-yellow-400 font-mono tracking-widest text-sm"
+                style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }}
               />
             </div>
           ))}
@@ -365,7 +445,7 @@ const LOBBY_DEFAULT = {
     { id: 'bracket_viewer',    label: '對戰表展示',     desc: 'OBS 用對戰表畫面',      order: 4 },
     { id: 'scoreboard_operator', label: '記分板控制台', desc: '管理兩隊即時比分',       order: 5 },
     { id: 'scoreboard_viewer', label: '記分板展示',     desc: 'OBS / 轉播用畫面',      order: 6 },
-    { id: 'lottery',           label: '抽獎系統',       desc: '閃光 / 消除 / 泡泡抽獎', order: 7 },
+    { id: 'lottery',           label: '抽獎系統',       desc: '閃光 / 賽跑 / 賽馬 / 彈珠台', order: 7 },
     { id: 'live_operator',     label: '實況計分板控制', desc: '即時對局計分',           order: 8 },
     { id: 'live_viewer',       label: '實況計分板展示', desc: '疊加在遊戲畫面上方',     order: 9 },
   ],
@@ -407,7 +487,7 @@ const LOBBY_ENTRY_META = [
   { id: 'bracket_viewer', label: '對戰表展示', desc: 'OBS 用 8 強對戰表', kind: 'public', kicker: 'BRACKET', color: '#facc15' },
   { id: 'scoreboard_viewer', label: '記分板展示', desc: 'OBS / 轉播用比分畫面', kind: 'public', kicker: 'SCOREBOARD', color: '#a78bfa' },
   { id: 'live_viewer', label: '實況計分板展示', desc: '疊加在遊戲畫面上方', kind: 'public', kicker: 'LIVE OVERLAY', color: '#34d399' },
-  { id: 'lottery', label: '抽獎系統', desc: '閃光 / 消除 / 泡泡抽獎', kind: 'public', kicker: 'DRAW', color: '#f472b6' },
+  { id: 'lottery', label: '抽獎系統', desc: '閃光 / 賽跑 / 賽馬 / 彈珠台', kind: 'public', kicker: 'DRAW', color: '#f472b6' },
   { id: 'operator', label: '操作者控制台', desc: '手動管理賽事 BP 顯示', kind: 'protected', kicker: 'BP CONTROL', color: '#f59e0b' },
   { id: 'bracket_operator', label: '對戰表控制台', desc: '管理 8 強賽事對戰表', kind: 'protected', kicker: 'BRACKET CONTROL', color: '#facc15' },
   { id: 'scoreboard_operator', label: '記分板控制台', desc: '管理兩隊即時比分', kind: 'protected', kicker: 'SCORE CONTROL', color: '#a78bfa' },
@@ -461,7 +541,7 @@ function getLobbyEntries(config) {
 }
 
 
-function HomePage({ onNavigate }) {
+function HomePage({ onNavigate, theme = 'dark', themeTokens = THEME_TOKENS.dark, onToggleTheme }) {
   const [config, setConfig]           = useFirebaseState('brawl_lobby_config', LOBBY_DEFAULT);
   const [fbPositions, setFbPositions] = useFirebaseState('brawl_lobby_positions', DEFAULT_POSITIONS);
   const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
@@ -477,6 +557,8 @@ function HomePage({ onNavigate }) {
     ...entries.filter(entry => entry.kind === 'protected'),
     { ...EDIT_MODE_ENTRY, color: safeConfig.accentColor },
   ], [entries, safeConfig.accentColor]);
+  const ui = themeTokens;
+  const isLight = theme === 'light';
 
   // ── 拖曳狀態（useRef 必須在 useEffect 之前宣告）──
   const draggingRef   = useRef(null);
@@ -578,11 +660,13 @@ function HomePage({ onNavigate }) {
     if (t === 'editmode') setEditMode(true);
   }
 
-  const bgStyle = useMemo(() => (
-    safeConfig.bgType === 'image' && safeConfig.bgValue.startsWith('http')
-      ? { backgroundImage: `url(${safeConfig.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : { backgroundColor: safeConfig.bgValue }
-  ), [safeConfig.bgType, safeConfig.bgValue]);
+  const bgStyle = useMemo(() => {
+    if (safeConfig.bgType === 'image' && safeConfig.bgValue.startsWith('http')) {
+      return { backgroundImage: `url(${safeConfig.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    }
+    const color = isLight && safeConfig.bgValue === LOBBY_DEFAULT.bgValue ? ui.homeDefaultBg : safeConfig.bgValue;
+    return { backgroundColor: color };
+  }, [safeConfig.bgType, safeConfig.bgValue, isLight, ui.homeDefaultBg]);
 
   function renderEntryCard(entry, compact = false) {
     const Icon = getButtonIcon(entry.id);
@@ -593,24 +677,25 @@ function HomePage({ onNavigate }) {
         onClick={() => handleModeClick(entry.id)}
         className={`group relative flex w-full text-left transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-yellow-300/80
           ${compact
-            ? 'items-center gap-4 rounded-lg border border-white/10 bg-white/[0.055] px-4 py-3 hover:border-white/20 hover:bg-white/[0.08]'
-            : 'min-h-[138px] flex-col justify-between rounded-lg border border-white/10 bg-white/[0.055] p-5 shadow-lg shadow-black/20 backdrop-blur hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.08]'}`}
+            ? 'items-center gap-4 rounded-lg border px-4 py-3'
+            : 'min-h-[138px] flex-col justify-between rounded-lg border p-5 shadow-lg backdrop-blur hover:-translate-y-0.5'}`}
+        style={{ background: ui.cardBg, borderColor: ui.border, boxShadow: compact ? 'none' : ui.shadow, color: ui.text }}
       >
         <div
-          className={`shrink-0 rounded-lg border border-white/10 flex items-center justify-center ${compact ? 'h-11 w-11' : 'h-12 w-12 mb-5'}`}
-          style={{ backgroundColor: `${entry.color}1f` }}
+          className={`shrink-0 rounded-lg border flex items-center justify-center ${compact ? 'h-11 w-11' : 'h-12 w-12 mb-5'}`}
+          style={{ backgroundColor: `${entry.color}1f`, borderColor: ui.border }}
         >
           <Icon size={compact ? 21 : 24} style={{ color: entry.color }} />
         </div>
         <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase text-white/35">{entry.kicker}</span>
+            <span className="text-[10px] font-black uppercase" style={{ color: ui.faintText }}>{entry.kicker}</span>
             {locked && <Lock size={10} className="text-yellow-300/80" />}
           </div>
-          <h2 className={`${compact ? 'text-base' : 'text-xl'} mt-1 font-black leading-tight text-white`}>{entry.label}</h2>
-          <p className={`${compact ? 'text-xs truncate' : 'text-sm leading-relaxed'} mt-1 text-white/48`}>{entry.desc}</p>
+          <h2 className={`${compact ? 'text-base' : 'text-xl'} mt-1 font-black leading-tight`} style={{ color: ui.textStrong }}>{entry.label}</h2>
+          <p className={`${compact ? 'text-xs truncate' : 'text-sm leading-relaxed'} mt-1`} style={{ color: ui.mutedText }}>{entry.desc}</p>
         </div>
-        {!compact && <ArrowRightLeft size={18} className="absolute bottom-5 right-5 text-white/20 transition group-hover:text-white/45" />}
+        {!compact && <ArrowRightLeft size={18} className="absolute bottom-5 right-5 transition" style={{ color: ui.faintText }} />}
       </button>
     );
   }
@@ -619,37 +704,37 @@ function HomePage({ onNavigate }) {
     if (!settingsOpen || !draft) return null;
     return (
       <div className="fixed inset-0 z-50 flex">
-        <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)} />
-        <div className="flex w-full max-w-sm flex-col overflow-y-auto border-l border-slate-700 bg-[#0f172a] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
-            <h2 className="flex items-center gap-2 text-base font-black text-white"><Palette size={16} className="text-yellow-400" /> 外觀設定</h2>
-            <button onClick={() => setSettingsOpen(false)} className="p-1 text-slate-400 transition hover:text-white"><X size={20} /></button>
+        <div className="flex-1 backdrop-blur-sm" onClick={() => setSettingsOpen(false)} style={{ background: ui.overlay }} />
+        <div className="flex w-full max-w-sm flex-col overflow-y-auto border-l shadow-2xl" style={{ background: ui.panelBg, borderColor: ui.border, color: ui.text }}>
+          <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: ui.border }}>
+            <h2 className="flex items-center gap-2 text-base font-black" style={{ color: ui.textStrong }}><Palette size={16} className="text-yellow-400" /> 外觀設定</h2>
+            <button onClick={() => setSettingsOpen(false)} className="p-1 transition"><X size={20} style={{ color: ui.mutedText }} /></button>
           </div>
           <div className="flex-1 space-y-5 overflow-y-auto p-5 text-sm">
             <section>
-              <label className="mb-2 block font-bold text-slate-300">主標題</label>
-              <input type="text" value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />
+              <label className="mb-2 block font-bold" style={{ color: ui.mutedText }}>主標題</label>
+              <input type="text" value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 focus:border-yellow-400 focus:outline-none" style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }} />
             </section>
             <section>
-              <label className="mb-2 block font-bold text-slate-300">副標題</label>
-              <input type="text" value={draft.subtitle} onChange={e => setDraft({ ...draft, subtitle: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />
+              <label className="mb-2 block font-bold" style={{ color: ui.mutedText }}>副標題</label>
+              <input type="text" value={draft.subtitle} onChange={e => setDraft({ ...draft, subtitle: e.target.value })} className="w-full rounded-lg border px-3 py-2 focus:border-yellow-400 focus:outline-none" style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }} />
             </section>
             <section>
-              <label className="mb-2 block font-bold text-slate-300">背景</label>
+              <label className="mb-2 block font-bold" style={{ color: ui.mutedText }}>背景</label>
               <div className="mb-3 flex gap-2">
                 {['color','image'].map(t => (
-                  <button key={t} onClick={() => setDraft({ ...draft, bgType: t })} className={`flex-1 rounded-lg border py-1.5 text-sm font-bold transition ${draft.bgType === t ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-800 text-slate-300 border-slate-600 hover:border-yellow-400'}`}>{t === 'color' ? '純色' : '圖片'}</button>
+                  <button key={t} onClick={() => setDraft({ ...draft, bgType: t })} className="flex-1 rounded-lg border py-1.5 text-sm font-bold transition hover:border-yellow-400" style={draft.bgType === t ? { background:'#facc15', color:'#1e293b', borderColor:'#facc15' } : { background: ui.subtleBg, color: ui.mutedText, borderColor: ui.border }}>{t === 'color' ? '純色' : '圖片'}</button>
                 ))}
               </div>
               {draft.bgType === 'color'
-                ? <div className="flex items-center gap-3"><input type="color" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="h-10 w-12 cursor-pointer rounded border-0 bg-transparent" /><input type="text" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-white focus:border-yellow-400 focus:outline-none" /></div>
-                : <input type="text" placeholder="https://..." value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />}
+                ? <div className="flex items-center gap-3"><input type="color" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="h-10 w-12 cursor-pointer rounded border-0 bg-transparent" /><input type="text" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:border-yellow-400 focus:outline-none" style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }} /></div>
+                : <input type="text" placeholder="https://..." value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-full rounded-lg border px-3 py-2 focus:border-yellow-400 focus:outline-none" style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }} />}
             </section>
             <section>
-              <label className="mb-2 block font-bold text-slate-300">強調色</label>
+              <label className="mb-2 block font-bold" style={{ color: ui.mutedText }}>強調色</label>
               <div className="mb-2 flex items-center gap-3">
                 <input type="color" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="h-10 w-12 cursor-pointer rounded border-0 bg-transparent" />
-                <input type="text" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-white focus:border-yellow-400 focus:outline-none" />
+                <input type="text" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:border-yellow-400 focus:outline-none" style={{ background: ui.inputBg, color: ui.text, borderColor: ui.border }} />
               </div>
               <div className="flex flex-wrap gap-2">
                 {['#facc15','#22d3ee','#34d399','#f472b6','#a78bfa','#fb923c','#ffffff'].map(c => (
@@ -657,12 +742,12 @@ function HomePage({ onNavigate }) {
                 ))}
               </div>
             </section>
-            <div className="border-t border-slate-700/60 pt-2">
-              <ChangePasswordSection accentColor={safeConfig.accentColor} />
+            <div className="border-t pt-2" style={{ borderColor: ui.border }}>
+              <ChangePasswordSection accentColor={safeConfig.accentColor} themeTokens={ui} />
             </div>
           </div>
-          <div className="flex gap-3 border-t border-slate-700 p-5">
-            <button onClick={resetAll} className="flex-1 rounded-xl border border-slate-600 bg-slate-800 py-2.5 text-sm font-bold text-slate-300 transition hover:border-red-400 hover:text-red-400">全部重置</button>
+          <div className="flex gap-3 border-t p-5" style={{ borderColor: ui.border }}>
+            <button onClick={resetAll} className="flex-1 rounded-xl border py-2.5 text-sm font-bold transition hover:border-red-400 hover:text-red-400" style={{ background: ui.subtleBg, color: ui.mutedText, borderColor: ui.border }}>全部重置</button>
             <button onClick={saveSettings} className="flex-1 rounded-xl py-2.5 text-sm font-black text-slate-900 transition hover:opacity-90" style={{ backgroundColor: safeConfig.accentColor }}>儲存</button>
           </div>
         </div>
@@ -674,14 +759,14 @@ function HomePage({ onNavigate }) {
     if (!toolsOpen) return null;
     return (
       <div className="fixed inset-0 z-40 flex justify-end">
-        <div className="flex-1 bg-black/55 backdrop-blur-sm" onClick={() => setToolsOpen(false)} />
-        <aside className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-slate-950/95 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <div className="flex-1 backdrop-blur-sm" onClick={() => setToolsOpen(false)} style={{ background: ui.overlay }} />
+        <aside className="flex h-full w-full max-w-md flex-col border-l shadow-2xl" style={{ background: ui.panelBg, borderColor: ui.border, color: ui.text }}>
+          <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: ui.border }}>
             <div>
-              <h2 className="text-lg font-black text-white">管理工具</h2>
-              <p className="mt-1 text-xs text-white/40">控制台與版面微調</p>
+              <h2 className="text-lg font-black" style={{ color: ui.textStrong }}>管理工具</h2>
+              <p className="mt-1 text-xs" style={{ color: ui.faintText }}>控制台與版面微調</p>
             </div>
-            <button onClick={() => setToolsOpen(false)} className="rounded-lg p-2 text-white/55 transition hover:bg-white/10 hover:text-white"><X size={20} /></button>
+            <button onClick={() => setToolsOpen(false)} className="rounded-lg p-2 transition" style={{ color: ui.mutedText, background: ui.subtleBg }}><X size={20} /></button>
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto p-5">
             {managementEntries.map(entry => renderEntryCard(entry, true))}
@@ -698,6 +783,7 @@ function HomePage({ onNavigate }) {
         target={gateTarget}
         onSuccess={handleGateSuccess}
         onCancel={() => setGateTarget(null)}
+        themeTokens={ui}
       />
     );
   }
@@ -714,7 +800,7 @@ function HomePage({ onNavigate }) {
         onTouchMove={onMouseMove}
         onTouchEnd={onMouseUp}
       >
-        {safeConfig.bgType === 'image' && <div className="absolute inset-0 bg-black/50 pointer-events-none" />}
+      {safeConfig.bgType === 'image' && <div className="absolute inset-0 pointer-events-none" style={{ background: isLight ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.5)' }} />}
 
         <div
           style={draggableStyle('title')}
@@ -735,7 +821,7 @@ function HomePage({ onNavigate }) {
           className={editRing}
         >
           <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-yellow-400">副標題</div>
-          <p className="whitespace-nowrap text-lg text-white/60">{safeConfig.subtitle}</p>
+          <p className="whitespace-nowrap text-lg" style={{ color: ui.mutedText }}>{safeConfig.subtitle}</p>
         </div>
 
         {entries.map(entry => {
@@ -749,11 +835,11 @@ function HomePage({ onNavigate }) {
               className={editRing}
             >
               <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-yellow-400">{entry.label}</div>
-              <button className="pointer-events-none relative flex min-w-[150px] flex-col items-center rounded-lg border border-white/10 bg-white/[0.055] p-5 text-center shadow-xl backdrop-blur">
+              <button className="pointer-events-none relative flex min-w-[150px] flex-col items-center rounded-lg border p-5 text-center shadow-xl backdrop-blur" style={{ background: ui.cardBg, borderColor: ui.border, color: ui.text }}>
                 <Icon className="mb-3 h-10 w-10" style={{ color: entry.color }} />
                 {isProtectedView(entry.id) && <Lock size={13} className="absolute right-2 top-2 text-yellow-400 opacity-70" />}
-                <h2 className="text-base font-black text-white">{entry.label}</h2>
-                <p className="mt-1 max-w-[150px] text-xs text-white/50">{entry.desc}</p>
+                <h2 className="text-base font-black" style={{ color: ui.textStrong }}>{entry.label}</h2>
+                <p className="mt-1 max-w-[150px] text-xs" style={{ color: ui.mutedText }}>{entry.desc}</p>
               </button>
             </div>
           );
@@ -768,10 +854,11 @@ function HomePage({ onNavigate }) {
           </button>
           <button
             onClick={openSettings}
-            className="relative rounded-xl border border-white/20 bg-white/10 p-2.5 transition hover:bg-white/20"
+            className="relative rounded-xl border p-2.5 transition"
+            style={{ background: ui.cardBg, borderColor: ui.border }}
             title="外觀設定（需要密碼）"
           >
-            <Palette size={18} className="text-white" />
+            <Palette size={18} style={{ color: ui.text }} />
             <Lock size={9} className="absolute right-1 top-1 text-yellow-400" />
           </button>
         </div>
@@ -792,34 +879,44 @@ function HomePage({ onNavigate }) {
       style={bgStyle}
       translate="no"
     >
-      {safeConfig.bgType === 'image' && <div className="absolute inset-0 bg-black/55 pointer-events-none" />}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-slate-950/40 to-black/70 pointer-events-none" />
+      {safeConfig.bgType === 'image' && <div className="absolute inset-0 pointer-events-none" style={{ background: isLight ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.55)' }} />}
+      <div className="absolute inset-0 pointer-events-none" style={{ background: isLight ? 'linear-gradient(to bottom, rgba(255,255,255,0.12), rgba(226,232,240,0.35), rgba(203,213,225,0.54))' : 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(15,23,42,0.4), rgba(0,0,0,0.7))' }} />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-8 lg:px-10">
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border" style={{ background: ui.cardBg, borderColor: ui.border }}>
               <Trophy size={20} style={{ color: safeConfig.accentColor }} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase text-white/35">KURAGE CUP</p>
-              <p className="text-sm font-bold text-white/70">賽事控制中心</p>
+              <p className="text-[10px] font-black uppercase" style={{ color: ui.faintText }}>KURAGE CUP</p>
+              <p className="text-sm font-bold" style={{ color: ui.mutedText }}>賽事控制中心</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={onToggleTheme}
+              className="rounded-lg border p-2.5 transition"
+              style={{ background: ui.cardBg, borderColor: ui.border, color: ui.text }}
+              title={isLight ? '切換深色模式' : '切換亮色模式'}
+            >
+              {isLight ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+            <button
               onClick={() => setToolsOpen(true)}
-              className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2 text-sm font-black text-white transition hover:bg-white/[0.12]"
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-black transition"
+              style={{ background: ui.cardBg, borderColor: ui.border, color: ui.text }}
             >
               <Settings size={16} />
               <span className="hidden sm:inline">管理工具</span>
             </button>
             <button
               onClick={openSettings}
-              className="relative rounded-lg border border-white/15 bg-white/[0.07] p-2.5 transition hover:bg-white/[0.12]"
+              className="relative rounded-lg border p-2.5 transition"
+              style={{ background: ui.cardBg, borderColor: ui.border }}
               title="外觀設定（需要密碼）"
             >
-              <Palette size={18} className="text-white" />
+              <Palette size={18} style={{ color: ui.text }} />
               <Lock size={8} className="absolute right-1 top-1 text-yellow-400" />
             </button>
           </div>
@@ -827,10 +924,10 @@ function HomePage({ onNavigate }) {
 
         <main className="flex flex-1 flex-col justify-center py-10 sm:py-14">
           <section className="mb-8 max-w-3xl">
-            <h1 className="text-4xl font-black italic leading-none text-white drop-shadow-lg sm:text-6xl" style={{ color: safeConfig.accentColor }}>
+            <h1 className="text-4xl font-black italic leading-none drop-shadow-lg sm:text-6xl" style={{ color: safeConfig.accentColor }}>
               {safeConfig.title}
             </h1>
-            <p className="mt-3 max-w-2xl text-base font-medium text-white/58 sm:text-lg">{safeConfig.subtitle}</p>
+            <p className="mt-3 max-w-2xl text-base font-medium sm:text-lg" style={{ color: ui.mutedText }}>{safeConfig.subtitle}</p>
           </section>
 
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1079,7 +1176,7 @@ function CoinFlipOverlay({ coinWinner, stage, t }) {
   );
 }
 
-function MultiplayerBPRoom({ onBack }) {
+function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const [lang, setLang] = useState('zh');
   const t = translations[lang];
   const [user, setUser] = useState(null);
@@ -1095,6 +1192,7 @@ function MultiplayerBPRoom({ onBack }) {
   const idleTimerRef = useRef(null);
   const banAudioRef  = useRef(null);
   const pickAudioRef = useRef(null);
+  const ui = themeTokens;
 
   // 預載音效（只在瀏覽器環境執行）
   useEffect(() => {
@@ -1344,7 +1442,7 @@ function MultiplayerBPRoom({ onBack }) {
 
   if (!draftState || !user) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-slate-300 font-bold text-xl">
+      <div className="min-h-screen flex items-center justify-center font-bold text-xl" style={{ background: ui.pageBg, color: ui.mutedText }}>
         <div className="animate-spin mr-3 border-4 border-slate-600 border-t-yellow-400 rounded-full w-8 h-8"></div>
         {lang === 'zh' ? '連線至雲端對戰房間...' : 'Connecting to Draft Room...'}
       </div>
@@ -1420,11 +1518,11 @@ function MultiplayerBPRoom({ onBack }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 p-2 md:p-6 font-sans flex flex-col" translate="no">
+    <div className="min-h-screen p-2 md:p-6 font-sans flex flex-col" style={{ background: ui.pageBg, color: ui.text }} translate="no">
       <style>{`.custom-scrollbar::-webkit-scrollbar{width:6px}.custom-scrollbar::-webkit-scrollbar-track{background:#0f172a;border-radius:4px}.custom-scrollbar::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}.custom-scrollbar::-webkit-scrollbar-thumb:hover{background:#475569}`}</style>
 
       {/* 頂部控制列 */}
-      <div className="flex flex-wrap justify-between items-center mb-4 gap-4 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+      <div className="flex flex-wrap justify-between items-center mb-4 gap-4 p-3 rounded-2xl border" style={{ background: ui.panelBg, borderColor: ui.border }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition">
             <Home size={18} />
@@ -1500,6 +1598,7 @@ function MultiplayerBPRoom({ onBack }) {
           target="reset"
           onSuccess={() => { setResetGate(false); handleReset(); }}
           onCancel={() => setResetGate(false)}
+          themeTokens={ui}
         />
       )}
 
@@ -1953,7 +2052,7 @@ function OperatorPanel({ onBack }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
+    <div className="kurage-control-bg min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1">
@@ -2072,7 +2171,7 @@ function ViewerView({ onBack }) {
     <div className="w-screen h-screen overflow-hidden flex flex-col relative font-sans select-none" style={bgStyle} translate="no">
 
       {/* 返回按鈕：完全透明，滑鼠移到左上角才顯示，不影響 OBS 擷取 */}
-      <button onClick={onBack} className="absolute top-4 left-4 z-50 bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-bold opacity-0 hover:opacity-100 transition-opacity duration-300 select-none">
+      <button onClick={onBack} className="kurage-floating-control absolute top-4 left-4 z-50 bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-bold opacity-0 hover:opacity-100 transition-opacity duration-300 select-none">
         ← 首頁
       </button>      <div className="w-full text-center pt-8 pb-4 z-10">
         <h1 className="text-3xl md:text-5xl font-extrabold tracking-[0.2em] text-white drop-shadow-md" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.4)' }}>{state.matchTitle}</h1>
@@ -2377,7 +2476,7 @@ function BracketViewer({ onBack }) {
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
 
-      <button onClick={onBack} style={{
+      <button onClick={onBack} className="kurage-floating-control" style={{
         position: 'absolute', top: 10, left: 10, zIndex: 300,
         background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none',
         padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -2386,7 +2485,7 @@ function BracketViewer({ onBack }) {
 
       <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 300, display: 'flex', gap: 8 }}>
         {editMode && <button onClick={resetLayout} style={{ background: 'rgba(239,68,68,0.85)', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>重置位置</button>}
-        <button onClick={() => setEditMode(v => !v)} style={{
+        <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{
           background: editMode ? '#facc15' : 'rgba(0,0,0,0.45)',
           color: editMode ? '#1e293b' : '#fff',
           border: editMode ? 'none' : '1px solid rgba(255,255,255,0.2)',
@@ -2538,7 +2637,7 @@ function BracketOperator({ onBack }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
+    <div className="kurage-control-bg min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 z-10">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1">
@@ -2760,7 +2859,7 @@ function ScoreboardOperator({ onBack }) {
   const maxWins = state.maxWins ?? 3;
   const STATUS_LABELS = { pending: '❓待定', live: '🔴進行中', done: '✅結束', skip: '➖跳過' };
   return (
-    <div className="min-h-screen bg-slate-100 font-sans flex flex-col">
+    <div className="kurage-control-bg min-h-screen bg-slate-100 font-sans flex flex-col">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm"><Home size={16} /> 首頁</button>
@@ -2976,10 +3075,10 @@ function ScoreboardViewer({ onBack }) {
       style={{ width:'100vw', height:'100vh', overflow:'hidden', position:'relative', ...bgStyle, fontFamily:'sans-serif' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
-      <button onClick={onBack} style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
+      <button onClick={onBack} className="kurage-floating-control" style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
       <div style={{ position:'absolute',top:10,right:10,zIndex:300,display:'flex',gap:8 }}>
         {editMode && <button onClick={resetLayout} style={{ background:'rgba(239,68,68,0.85)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer' }}>重置位置</button>}
-        <button onClick={() => setEditMode(v => !v)} style={{ background:editMode?'#facc15':'rgba(0,0,0,0.45)',color:editMode?'#1e293b':'#fff',border:editMode?'none':'1px solid rgba(255,255,255,0.2)',padding:'4px 14px',borderRadius:7,fontSize:12,fontWeight:900,cursor:'pointer',opacity:editMode?1:0,transition:'opacity 0.3s' }} onMouseEnter={e=>{ if(!editMode) e.target.style.opacity=1; }} onMouseLeave={e=>{ if(!editMode) e.target.style.opacity=0; }}>{editMode?'✓ 完成':'✥ 編輯'}</button>
+        <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{ background:editMode?'#facc15':'rgba(0,0,0,0.45)',color:editMode?'#1e293b':'#fff',border:editMode?'none':'1px solid rgba(255,255,255,0.2)',padding:'4px 14px',borderRadius:7,fontSize:12,fontWeight:900,cursor:'pointer',opacity:editMode?1:0,transition:'opacity 0.3s' }} onMouseEnter={e=>{ if(!editMode) e.target.style.opacity=1; }} onMouseLeave={e=>{ if(!editMode) e.target.style.opacity=0; }}>{editMode?'✓ 完成':'✥ 編輯'}</button>
       </div>
       {editMode && <div style={{ position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',background:'rgba(250,204,21,0.9)',color:'#1e293b',padding:'5px 18px',borderRadius:18,fontSize:11,fontWeight:900,zIndex:300,pointerEvents:'none',whiteSpace:'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
@@ -3077,12 +3176,129 @@ function ScoreboardViewer({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 抽獎系統（6 種模式，支援 300+ 人）
+// 抽獎系統（精簡模式，支援 300+ 人）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const LOTTERY_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#a855f7','#ec4899','#06b6d4','#f97316','#10b981','#6366f1'];
 
-function LotteryApp({ onBack }) {
+function createPlinkoBoard(W, H) {
+  const slot = { x1: W * 0.38, x2: W * 0.62, y: H - 58, h: 46 };
+  const pins = [];
+  for (let row = 0; row < 11; row++) {
+    const count = row % 2 === 0 ? 9 : 8;
+    const y = 52 + row * 29;
+    const gap = W / (count + 1);
+    for (let col = 0; col < count; col++) {
+      const wave = Math.sin(row * 1.7 + col) * 5;
+      pins.push({ x: gap * (col + 1) + (row % 2 ? gap / 2 : 0) + wave, y, r: row > 7 ? 4.5 : 5 });
+    }
+  }
+  const segments = [
+    { x1: W * 0.10, y1: 94,  x2: W * 0.27, y2: 145, r: 6, color: '#38bdf8' },
+    { x1: W * 0.90, y1: 94,  x2: W * 0.73, y2: 145, r: 6, color: '#38bdf8' },
+    { x1: W * 0.18, y1: 214, x2: W * 0.38, y2: 176, r: 6, color: '#a78bfa' },
+    { x1: W * 0.82, y1: 214, x2: W * 0.62, y2: 176, r: 6, color: '#a78bfa' },
+    { x1: W * 0.24, y1: 310, x2: W * 0.42, y2: 348, r: 6, color: '#34d399' },
+    { x1: W * 0.76, y1: 310, x2: W * 0.58, y2: 348, r: 6, color: '#34d399' },
+    { x1: 28, y1: 72, x2: W * 0.18, y2: H - 105, r: 8, color: '#fb923c' },
+    { x1: W - 28, y1: 72, x2: W * 0.82, y2: H - 105, r: 8, color: '#fb923c' },
+  ];
+  const movers = [
+    { cx: W * 0.35, y: H * 0.49, length: 92, amp: 34, speed: 0.035, phase: 0, r: 7, color: '#f472b6' },
+    { cx: W * 0.65, y: H * 0.62, length: 92, amp: 34, speed: 0.032, phase: Math.PI, r: 7, color: '#f472b6' },
+  ];
+  return { W, H, slot, pins, segments, movers };
+}
+
+function getPlinkoMovingSegments(board, frame) {
+  return board.movers.map(m => {
+    const offset = Math.sin(frame * m.speed + m.phase) * m.amp;
+    const vx = Math.cos(frame * m.speed + m.phase) * m.amp * m.speed;
+    const x = m.cx + offset;
+    return {
+      x1: x - m.length / 2,
+      y1: m.y,
+      x2: x + m.length / 2,
+      y2: m.y,
+      r: m.r,
+      color: m.color,
+      vx,
+    };
+  });
+}
+
+function drawPlinkoBoard(ctx, board, frame, palette) {
+  const { W, H, slot } = board;
+  const slotCenter = (slot.x1 + slot.x2) / 2;
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, palette.top);
+  bg.addColorStop(0.55, palette.mid);
+  bg.addColorStop(1, palette.bottom);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  [...board.segments, ...getPlinkoMovingSegments(board, frame)].forEach(seg => {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = seg.r * 2;
+    ctx.strokeStyle = seg.color;
+    ctx.shadowColor = seg.color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(seg.x1, seg.y1);
+    ctx.lineTo(seg.x2, seg.y2);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  board.pins.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r + Math.sin((frame + i) * 0.05) * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = palette.pin;
+    ctx.fill();
+    ctx.strokeStyle = palette.pinStroke;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = 'rgba(250,204,21,0.16)';
+  ctx.fillRect(slot.x1, slot.y, slot.x2 - slot.x1, slot.h);
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(slot.x1, slot.y, slot.x2 - slot.x1, slot.h);
+  ctx.fillStyle = '#facc15';
+  ctx.font = '900 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('得獎槽', slotCenter, slot.y + 29);
+}
+
+function resolvePlinkoSegment(ball, seg) {
+  const vx = seg.x2 - seg.x1;
+  const vy = seg.y2 - seg.y1;
+  const lenSq = vx * vx + vy * vy;
+  if (lenSq <= 0) return false;
+  const t = Math.max(0, Math.min(1, ((ball.x - seg.x1) * vx + (ball.y - seg.y1) * vy) / lenSq));
+  const px = seg.x1 + vx * t;
+  const py = seg.y1 + vy * t;
+  const dx = ball.x - px;
+  const dy = ball.y - py;
+  const dist = Math.hypot(dx, dy) || 0.0001;
+  const minDist = ball.r + (seg.r ?? 5);
+  if (dist >= minDist) return false;
+  const nx = dx / dist;
+  const ny = dy / dist;
+  ball.x = px + nx * minDist;
+  ball.y = py + ny * minDist;
+  const dot = ball.vx * nx + ball.vy * ny;
+  if (dot < 0) {
+    ball.vx = (ball.vx - 1.85 * dot * nx) * 0.88 + (seg.vx || 0) * 0.42;
+    ball.vy = (ball.vy - 1.85 * dot * ny) * 0.88;
+  }
+  return true;
+}
+
+function LotteryApp({ onBack, theme = 'dark', themeTokens = THEME_TOKENS.dark }) {
   const [rawText, setRawText]   = useState('');
   const [names, setNames]       = useState([]);
   const [pool, setPool]         = useState([]);
@@ -3096,20 +3312,12 @@ function LotteryApp({ onBack }) {
   // mode-specific display state
   const [flashItems, setFlashItems]       = useState([]);
   const [flashFinal, setFlashFinal]       = useState([]);
-  const [elimList, setElimList]           = useState([]);
-  const [elimGone, setElimGone]           = useState(new Set());
-  const [elimPending, setElimPending]     = useState(null);
-  const [spotlight, setSpotlight]         = useState(-1);
-  const [spotNames, setSpotNames]         = useState([]);
-  const [matrixLines, setMatrixLines]     = useState([]);
-  const [matrixWinner, setMatrixWinner]   = useState('');
-  const [gridNames, setGridNames]         = useState([]);
-  const [gridPick, setGridPick]           = useState(-1);
-  const [bubbles, setBubbles]             = useState([]);
-  const [bubbleWinners, setBubbleWinners] = useState([]);
   const [raceFinishers, setRaceFinishers] = useState([]);
   const [raceRunning, setRaceRunning]     = useState(false);
+  const [plinkoFinishers, setPlinkoFinishers] = useState([]);
+  const [plinkoRunning, setPlinkoRunning] = useState(false);
   const raceCanvasRef = useRef(null);
+  const plinkoCanvasRef = useRef(null);
 
   // horse mode
   const [horses, setHorses] = useState([
@@ -3130,6 +3338,15 @@ function LotteryApp({ onBack }) {
   const itvRef      = useRef(null);
   const rafRef      = useRef(null);
   const stateRef    = useRef({});
+  const ui = themeTokens;
+  const isLight = theme === 'light';
+  const plinkoPalette = {
+    top: ui.canvasTop,
+    mid: ui.canvasMid,
+    bottom: ui.canvasBottom,
+    pin: isLight ? 'rgba(71,85,105,0.72)' : 'rgba(148,163,184,0.75)',
+    pinStroke: isLight ? 'rgba(15,23,42,0.28)' : 'rgba(255,255,255,0.35)',
+  };
 
   useEffect(() => () => {
     clearInterval(itvRef.current);
@@ -3137,6 +3354,12 @@ function LotteryApp({ onBack }) {
     clearTimeout(timerRef.current);
     cancelAnimationFrame(rafRef.current);
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'plinko' || phase !== 'idle') return;
+    const frame = requestAnimationFrame(drawPlinkoPreview);
+    return () => cancelAnimationFrame(frame);
+  }, [mode, phase, names.length, winCount, theme]);
 
   function parseNames(text) {
     return [...new Set(text.split(/[\n,、，]+/).map(s => s.trim()).filter(Boolean))];
@@ -3159,11 +3382,8 @@ function LotteryApp({ onBack }) {
     stopAll();
     setPhase('idle'); setWinners([]);
     setFlashItems([]); setFlashFinal([]);
-    setElimList([]); setElimGone(new Set()); setElimPending(null);
-    setSpotlight(-1); setSpotNames([]);
-    setMatrixLines([]); setMatrixWinner('');
-    setGridNames([]); setGridPick(-1);
-    setBubbles([]); setBubbleWinners([]);
+    setRaceFinishers([]); setRaceRunning(false);
+    setPlinkoFinishers([]); setPlinkoRunning(false);
     setPool([...names]);
   }
   function pickFrom(arr, n) {
@@ -3177,6 +3397,15 @@ function LotteryApp({ onBack }) {
     const ts = new Date().toLocaleTimeString();
     setHistory(h => [...picked.map(name => ({ name, time: ts })), ...h]);
     if (removeWinners) setPool(p => p.filter(n => !picked.includes(n)));
+  }
+
+  function drawPlinkoPreview() {
+    const canvas = plinkoCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    drawPlinkoBoard(ctx, createPlinkoBoard(W, H), 0, plinkoPalette);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -3203,177 +3432,7 @@ function LotteryApp({ onBack }) {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 模式 2：💥 消除賽 – 逐一淘汰，越到後面越慢
-  // ──────────────────────────────────────────────────────────────────────────
-  function startEliminate() {
-    const cur = [...pool];
-    if (cur.length < winCount) return;
-    const shuffled = [...cur].sort(() => Math.random() - 0.5);
-    const picked = shuffled.slice(0, winCount);
-    const toElim = shuffled.slice(winCount);
-    setElimList(shuffled);
-    setElimGone(new Set());
-    setElimPending(null);
-    stateRef.current = { toElim, picked, idx: 0 };
-
-    function next() {
-      const { toElim, picked, idx } = stateRef.current;
-      if (idx >= toElim.length) { finishDraw(picked); return; }
-      const name = toElim[idx];
-      setElimPending(name);
-      const pct = idx / toElim.length;
-      const delay = pct < 0.5 ? 120 : pct < 0.8 ? 250 : pct < 0.95 ? 500 : 900;
-      timerRef.current = setTimeout(() => {
-        setElimGone(g => new Set([...g, name]));
-        setElimPending(null);
-        stateRef.current.idx++;
-        timerRef.current = setTimeout(next, 60);
-      }, delay);
-    }
-    timerRef.current = setTimeout(next, 300);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 模式 3：🔦 聚光燈 – 燈光掃過名字列表
-  // ──────────────────────────────────────────────────────────────────────────
-  function startSpotlight() {
-    const cur = [...pool];
-    if (cur.length < winCount) return;
-    const picked = pickFrom(cur, winCount);
-    const display = [...cur].sort(() => Math.random() - 0.5).slice(0, Math.min(cur.length, 40));
-    // 確保 picked 都在 display 裡
-    picked.forEach((p, i) => { if (!display.includes(p)) display[i] = p; });
-    setSpotNames(display.sort(() => Math.random() - 0.5));
-    setSpotlight(-1);
-    stateRef.current = { picked, display: display.sort(() => Math.random() - 0.5), step: 0, total: 60 + display.length };
-
-    function tick() {
-      const s = stateRef.current;
-      s.step++;
-      const pct = s.step / s.total;
-      const idx = Math.floor((pct * pct) * s.display.length) % s.display.length;
-      setSpotlight(idx);
-      const delay = 40 + pct * pct * 400;
-      if (s.step < s.total) {
-        timerRef.current = setTimeout(tick, delay);
-      } else {
-        const finalIdx = s.display.indexOf(s.picked[0]);
-        setSpotlight(finalIdx >= 0 ? finalIdx : 0);
-        timerRef.current = setTimeout(() => finishDraw(s.picked), 600);
-      }
-    }
-    timerRef.current = setTimeout(tick, 200);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 模式 4：🌀 矩陣雨 – 綠色字符雨，最後顯示得獎者
-  // ──────────────────────────────────────────────────────────────────────────
-  function startMatrix() {
-    const cur = [...pool];
-    if (cur.length < winCount) return;
-    const picked = pickFrom(cur, winCount);
-    const COLS = 18;
-    // 每列獨立滾動，每列顯示一個名字
-    const colNames = Array.from({ length: COLS }, () => cur[Math.floor(Math.random() * cur.length)]);
-    let tick = 0, total = 60;
-    itvRef.current = setInterval(() => {
-      tick++;
-      const pct = tick / total;
-      const lines = Array.from({ length: COLS }, (_, c) => {
-        if (pct > 0.6 && c < winCount) return picked[c];
-        return cur[Math.floor(Math.random() * cur.length)];
-      });
-      setMatrixLines(lines);
-      if (tick >= total) {
-        clearInterval(itvRef.current);
-        setMatrixLines(Array.from({ length: COLS }, (_, c) => c < winCount ? picked[c] : ''));
-        timerRef.current = setTimeout(() => finishDraw(picked), 500);
-      }
-    }, 80);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 模式 5：🎪 九宮格輪盤 – 格子上快速跑，最後停在得獎者
-  // ──────────────────────────────────────────────────────────────────────────
-  function startGrid() {
-    const cur = [...pool];
-    if (cur.length < winCount) return;
-    const picked = pickFrom(cur, winCount);
-    const SLOTS = 9;
-    const grid = Array.from({ length: SLOTS }, (_, i) => {
-      if (i < winCount) return picked[i];
-      return cur[Math.floor(Math.random() * cur.length)];
-    }).sort(() => Math.random() - 0.5);
-    const winnerIdx = grid.indexOf(picked[0]);
-    setGridNames(grid);
-    setGridPick(-1);
-
-    let idx = 0, tick = 0, total = 50;
-    itvRef.current = setInterval(() => {
-      tick++;
-      const pct = tick / total;
-      setGridPick(Math.floor(Math.random() * SLOTS));
-      if (tick >= total) {
-        clearInterval(itvRef.current);
-        setGridPick(winnerIdx);
-        timerRef.current = setTimeout(() => finishDraw(picked), 800);
-      }
-    }, 60 + Math.floor(tick / total * 200));
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 模式 6：🫧 泡泡 – React state 版，不用 Canvas，不卡死
-  // ──────────────────────────────────────────────────────────────────────────
-  function startBubble() {
-    const cur = [...pool];
-    if (cur.length < winCount) return;
-    const picked = pickFrom(cur, winCount);
-    const count = Math.min(cur.length, 40); // 最多 40 顆
-    const sample = [...cur].sort(() => Math.random() - 0.5).slice(0, count);
-    picked.forEach((p, i) => { if (!sample.includes(p)) sample[i] = p; });
-
-    const initial = sample.map((name, i) => ({
-      id: i, name,
-      x: 10 + Math.random() * 80,
-      y: 10 + Math.random() * 80,
-      vx: (Math.random() - 0.5) * 4,
-      vy: (Math.random() - 0.5) * 4,
-      color: LOTTERY_COLORS[i % LOTTERY_COLORS.length],
-      r: 44,
-    }));
-    setBubbles(initial);
-    setBubbleWinners([]);
-    stateRef.current = { bubbles: initial, picked, tick: 0, total: 120 };
-
-    function frame() {
-      const s = stateRef.current;
-      s.tick++;
-      const decay = s.tick < s.total * 0.6 ? 0.998 : 0.97;
-      const next = s.bubbles.map(b => {
-        let x = b.x + b.vx * 0.5;
-        let y = b.y + b.vy * 0.5;
-        let vx = b.vx * decay;
-        let vy = b.vy * decay;
-        if (x < 5)  { x = 5;  vx = Math.abs(vx); }
-        if (x > 95) { x = 95; vx = -Math.abs(vx); }
-        if (y < 5)  { y = 5;  vy = Math.abs(vy); }
-        if (y > 95) { y = 95; vy = -Math.abs(vy); }
-        return { ...b, x, y, vx, vy };
-      });
-      s.bubbles = next;
-      setBubbles([...next]);
-      if (s.tick < s.total) {
-        rafRef.current = requestAnimationFrame(frame);
-      } else {
-        setBubbleWinners(s.picked);
-        timerRef.current = setTimeout(() => finishDraw(s.picked), 800);
-      }
-    }
-    rafRef.current = requestAnimationFrame(frame);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 模式 7：🏁 迷宮賽跑 – 300 個數字在迷宮裡賽跑
+  // 模式 2：🏁 迷宮賽跑 – 300 個數字在迷宮裡賽跑
   // ──────────────────────────────────────────────────────────────────────────
   function startRace() {
     const cur = [...pool];
@@ -3382,7 +3441,7 @@ function LotteryApp({ onBack }) {
     setRaceFinishers([]);
     setRaceRunning(true);
 
-    setTimeout(() => {
+    timerRef.current = setTimeout(() => {
       const canvas = raceCanvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -3449,15 +3508,18 @@ function LotteryApp({ onBack }) {
         const s = stateRef.current;
         s.frame++;
 
-        // 深色背景
-        ctx.fillStyle = '#080818';
+        const raceBg = ctx.createLinearGradient(0, 0, 0, H);
+        raceBg.addColorStop(0, ui.canvasTop);
+        raceBg.addColorStop(0.58, ui.canvasMid);
+        raceBg.addColorStop(1, ui.canvasBottom);
+        ctx.fillStyle = raceBg;
         ctx.fillRect(0, 0, W, H);
 
         // 星星背景（閃爍）
         s.stars.forEach(st => {
           st.b += 0.02 + Math.random() * 0.01;
           const alpha = 0.15 + Math.abs(Math.sin(st.b)) * 0.35;
-          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.fillStyle = isLight ? `rgba(15,23,42,${alpha * 0.55})` : `rgba(255,255,255,${alpha})`;
           ctx.beginPath();
           ctx.arc(st.x, st.y, st.s, 0, Math.PI * 2);
           ctx.fill();
@@ -3729,7 +3791,175 @@ function LotteryApp({ onBack }) {
     }, 100);
   }
 
-  // ── 模式 8：🏇 賽馬 ──────────────────────────────────────────────────────────
+  // ── 模式 3：🎯 幸運彈珠台 ───────────────────────────────────────────────────
+  function startPlinko() {
+    const cur = [...pool];
+    if (cur.length < winCount) return;
+
+    setPlinkoFinishers([]);
+    setPlinkoRunning(true);
+
+    timerRef.current = setTimeout(() => {
+      const canvas = plinkoCanvasRef.current;
+      if (!canvas) { setPlinkoRunning(false); setPhase('idle'); return; }
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      const targetCount = Math.min(winCount, cur.length);
+      const board = createPlinkoBoard(W, H);
+      const { slot } = board;
+      const slotCenter = (slot.x1 + slot.x2) / 2;
+      const ballR = cur.length > 220 ? 6 : cur.length > 120 ? 7 : cur.length > 60 ? 9 : 11;
+
+      const shuffled = [...cur].sort(() => Math.random() - 0.5);
+      const balls = shuffled.map((name, i) => ({
+        id: i,
+        name,
+        x: W / 2 + (Math.random() - 0.5) * 190,
+        y: -30 - i * (cur.length > 160 ? 5 : cur.length > 80 ? 8 : 13),
+        vx: (Math.random() - 0.5) * 1.6,
+        vy: 0,
+        r: ballR,
+        color: LOTTERY_COLORS[i % LOTTERY_COLORS.length],
+        settled: false,
+        winner: false,
+      }));
+
+      stateRef.current = { balls, board, winners: [], frame: 0, doneTimer: null };
+
+      function drawBackground(s) {
+        drawPlinkoBoard(ctx, s.board, s.frame, plinkoPalette);
+      }
+
+      function drawBall(ball) {
+        if (ball.y < -40) return;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+        if (ball.winner) {
+          const g = ctx.createRadialGradient(ball.x - ball.r * 0.35, ball.y - ball.r * 0.35, 0, ball.x, ball.y, ball.r);
+          g.addColorStop(0, '#fff7ad');
+          g.addColorStop(0.45, '#facc15');
+          g.addColorStop(1, '#d97706');
+          ctx.fillStyle = g;
+          ctx.shadowColor = '#facc15';
+          ctx.shadowBlur = 18;
+        } else {
+          ctx.fillStyle = ball.color;
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = ball.winner ? '#fff' : 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = ball.winner ? 2 : 1;
+        ctx.stroke();
+
+        if (ball.r >= 8) {
+          ctx.fillStyle = '#fff';
+          ctx.font = `900 ${Math.max(8, ball.r * 0.75)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(ball.id + 1), ball.x, ball.y);
+        }
+      }
+
+      function completeDraw(s) {
+        if (s.doneTimer) return;
+        const picked = [...s.winners];
+        if (picked.length < targetCount) {
+          const used = new Set(picked);
+          const closest = [...s.balls]
+            .filter(b => !used.has(b.name))
+            .sort((a, b) => Math.abs(a.x - slotCenter) - Math.abs(b.x - slotCenter));
+          for (const ball of closest) {
+            if (picked.length >= targetCount) break;
+            picked.push(ball.name);
+            ball.winner = true;
+            ball.settled = true;
+            ball.x = slotCenter + (picked.length - (targetCount + 1) / 2) * Math.max(20, ball.r * 3);
+            ball.y = slot.y + slot.h / 2;
+          }
+        }
+        setPlinkoFinishers(picked);
+        setPlinkoRunning(false);
+        drawBackground(s);
+        s.balls.forEach(drawBall);
+        timerRef.current = setTimeout(() => finishDraw(picked), 800);
+        s.doneTimer = timerRef.current;
+      }
+
+      function stepPhysics(s) {
+        const winnerSet = new Set(s.winners);
+        const movingSegments = getPlinkoMovingSegments(s.board, s.frame);
+        for (const ball of s.balls) {
+          if (ball.settled) continue;
+          ball.vy += 0.17;
+          ball.vx *= 0.996;
+          ball.x += ball.vx;
+          ball.y += ball.vy;
+
+          if (ball.x < ball.r) { ball.x = ball.r; ball.vx = Math.abs(ball.vx) * 0.78; }
+          if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx) * 0.78; }
+
+          for (const pin of s.board.pins) {
+            const dx = ball.x - pin.x;
+            const dy = ball.y - pin.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = ball.r + pin.r;
+            if (dist > 0 && dist < minDist) {
+              const nx = dx / dist;
+              const ny = dy / dist;
+              ball.x = pin.x + nx * minDist;
+              ball.y = pin.y + ny * minDist;
+              const dot = ball.vx * nx + ball.vy * ny;
+              ball.vx = (ball.vx - 1.8 * dot * nx) * 0.86 + (Math.random() - 0.5) * 0.65;
+              ball.vy = Math.max(0.4, (ball.vy - 1.8 * dot * ny) * 0.82);
+            }
+          }
+
+          for (const seg of s.board.segments) resolvePlinkoSegment(ball, seg);
+          for (const seg of movingSegments) resolvePlinkoSegment(ball, seg);
+
+          if (ball.y >= slot.y + ball.r) {
+            const inWinningSlot = ball.x >= slot.x1 && ball.x <= slot.x2;
+            if (inWinningSlot && s.winners.length < targetCount && !winnerSet.has(ball.name)) {
+              s.winners.push(ball.name);
+              ball.winner = true;
+              ball.settled = true;
+              ball.x = slotCenter + (s.winners.length - (targetCount + 1) / 2) * Math.max(20, ball.r * 3);
+              ball.y = slot.y + slot.h / 2;
+              setPlinkoFinishers([...s.winners]);
+            } else if (ball.y >= H - ball.r - 6) {
+              ball.y = H - ball.r - 6;
+              ball.vx = 0;
+              ball.vy = 0;
+              ball.settled = true;
+            }
+          }
+        }
+      }
+
+      function animate() {
+        const s = stateRef.current;
+        s.frame++;
+        stepPhysics(s);
+        drawBackground(s);
+        s.balls.forEach(drawBall);
+
+        const allSettled = s.balls.every(b => b.settled);
+        if (s.winners.length >= targetCount || s.frame > 960 || allSettled) {
+          completeDraw(s);
+          return;
+        }
+        rafRef.current = requestAnimationFrame(animate);
+      }
+
+      drawBackground(stateRef.current);
+      rafRef.current = requestAnimationFrame(animate);
+    }, 100);
+  }
+
+  // ── 模式 4：🏇 賽馬 ──────────────────────────────────────────────────────────
   function startHorse() {
     setHorses(h => h.map(x => ({ ...x, pos: 0 })));
     setHFinish([]); hFinRef.current = [];
@@ -3759,9 +3989,6 @@ function LotteryApp({ onBack }) {
             if (nf.length >= next.length) {
               clearInterval(itvRef.current);
               setPhase('done');
-              setWinners(nf.map(f => `${f.emoji} ${f.name}`));
-              const ts = new Date().toLocaleTimeString();
-              setHistory(hist => [{ name: `🥇${nf[0]?.emoji}${nf[0]?.name}`, time: ts }, ...hist]);
             }
             return next;
           });
@@ -3774,102 +4001,126 @@ function LotteryApp({ onBack }) {
   function handleStart() {
     stopAll();
     setPhase('running');
-    setWinners([]); setFlashFinal([]); setBubbleWinners([]);
-    if (mode === 'flash')     startFlash();
-    if (mode === 'eliminate') startEliminate();
-    if (mode === 'spotlight') startSpotlight();
-    if (mode === 'matrix')    startMatrix();
-    if (mode === 'grid')      startGrid();
-    if (mode === 'bubble')    startBubble();
-    if (mode === 'race')      startRace();
-    if (mode === 'horse')     startHorse();
+    setWinners([]);
+    setFlashFinal([]);
+    setRaceFinishers([]);
+    setPlinkoFinishers([]);
+    setPlinkoRunning(false);
+    if (mode === 'flash') startFlash();
+    if (mode === 'race') startRace();
+    if (mode === 'horse') startHorse();
+    if (mode === 'plinko') startPlinko();
   }
 
   const MODES = [
-    { id:'flash',     e:'⚡', label:'閃光',   desc:'名字高速閃爍後揭曉' },
-    { id:'eliminate', e:'💥', label:'消除賽', desc:'逐一淘汰到最後' },
-    { id:'spotlight', e:'🔦', label:'聚光燈', desc:'燈光掃過名單停下' },
-    { id:'matrix',    e:'🌀', label:'矩陣雨', desc:'字符雨中浮現贏家' },
-    { id:'grid',      e:'🎪', label:'九宮格', desc:'格子輪盤停在贏家' },
-    { id:'bubble',    e:'🫧', label:'泡泡球', desc:'彩球飛舞最後金球' },
-    { id:'race',      e:'🏁', label:'迷宮賽跑', desc:'數字在迷宮賽跑前幾名得獎' },
-    { id:'horse',     e:'🏇', label:'賽馬', desc:'水果賽馬競速' },
+    { id:'flash',  e:'⚡', label:'閃光',     desc:'名字高速閃爍後揭曉', hint:'快速、乾淨、適合連抽' },
+    { id:'race',   e:'🏁', label:'迷宮賽跑', desc:'名字球在迷宮競速，前幾名得獎', hint:'最有現場感的名單抽獎' },
+    { id:'horse',  e:'🏇', label:'賽馬',     desc:'水果賽馬小遊戲', hint:'不吃名單，純娛樂用' },
+    { id:'plinko', e:'🎯', label:'幸運彈珠台', desc:'名字球落進金色得獎槽', hint:'新玩法，支援多人名單' },
   ];
 
-  const dim = 'rgba(255,255,255,0.4)';
+  const dim = ui.mutedText;
   const cannotStart = phase === 'running' || (mode !== 'horse' && (pool.length < winCount || names.length === 0));
 
   return (
-    <div style={{ minHeight:'100vh', background:'#0d0d1a', color:'#fff', fontFamily:'sans-serif', display:'flex', flexDirection:'column' }} translate="no">
+    <div style={{
+      minHeight:'100vh', background:ui.pageBg, color:ui.text, fontFamily:'sans-serif', display:'flex', flexDirection:'column',
+      '--lottery-panel': ui.panelBg,
+      '--lottery-card': ui.cardBg,
+      '--lottery-card-hover': ui.cardBgHover,
+      '--lottery-subtle': ui.subtleBg,
+      '--lottery-border': ui.border,
+      '--lottery-border-strong': ui.borderStrong,
+      '--lottery-text': ui.text,
+      '--lottery-text-strong': ui.textStrong,
+      '--lottery-muted': ui.mutedText,
+      '--lottery-faint': ui.faintText,
+      '--lottery-input': ui.inputBg,
+      '--lottery-canvas': ui.canvasBg,
+      '--lottery-scroll-track': ui.scrollTrack,
+      '--lottery-scroll-thumb': ui.scrollThumb,
+      '--lottery-shadow': ui.shadow,
+      '--lottery-modal': ui.modalBg,
+    }} translate="no">
       <style>{`
         *{box-sizing:border-box}
-        ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#1e293b}::-webkit-scrollbar-thumb{background:#475569;border-radius:3px}
+        ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--lottery-scroll-track)}::-webkit-scrollbar-thumb{background:var(--lottery-scroll-thumb);border-radius:3px}
         @keyframes popIn{0%{transform:scale(0.3);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
         @keyframes shimmer{0%,100%{background-position:-200% center}50%{background-position:200% center}}
-        @keyframes matrixFall{0%{transform:translateY(-20px);opacity:0}100%{transform:translateY(0);opacity:1}}
-        @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
         .winner-pop{animation:popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards}
         .shimmer-text{background:linear-gradient(90deg,#facc15,#fff,#facc15);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 2s linear infinite}
-        .pulse-gold{animation:pulse2 0.8s ease-in-out infinite}
-        .matrix-cell{animation:matrixFall 0.1s ease-out}
+        .lottery-mode-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 20px;border-bottom:1px solid var(--lottery-border);background:var(--lottery-subtle)}
+        .lottery-mode-card{min-height:82px;border-radius:12px;border:1px solid var(--lottery-border);background:var(--lottery-card);color:var(--lottery-muted);padding:12px;text-align:left;cursor:pointer;transition:all .18s;display:flex;gap:10px;align-items:flex-start}
+        .lottery-mode-card:hover{background:var(--lottery-card-hover);border-color:var(--lottery-border-strong)}
+        .lottery-mode-card.active{background:rgba(250,204,21,0.16);border-color:rgba(250,204,21,0.65);color:var(--lottery-text-strong);box-shadow:0 0 24px rgba(250,204,21,0.16)}
+        .lottery-layout{flex:1;display:flex;overflow:hidden;min-height:0}
+        .lottery-sidebar{width:250px;border-right:1px solid var(--lottery-border);background:var(--lottery-panel);display:flex;flex-direction:column;padding:16px;gap:12px;overflow-y:auto;flex-shrink:0}
+        .lottery-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:20px;position:relative;overflow:hidden;min-width:0}
+        .lottery-canvas-row{width:100%;max-width:900px;display:flex;gap:12px}
+        .lottery-leaderboard{width:170px;flex-shrink:0;background:var(--lottery-card);border-radius:16px;border:1px solid var(--lottery-border);padding:12px;max-height:440px;overflow:hidden;display:flex;flex-direction:column}
+        @media(max-width:900px){.lottery-mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lottery-layout{flex-direction:column;overflow:auto}.lottery-sidebar{width:100%;border-right:0;border-bottom:1px solid var(--lottery-border);max-height:none}.lottery-stage{min-height:560px;justify-content:flex-start}.lottery-canvas-row{flex-direction:column}.lottery-leaderboard{width:100%;max-height:180px}}
       `}</style>
 
       {/* Header */}
-      <div style={{ background:'rgba(255,255,255,0.04)', borderBottom:'1px solid rgba(255,255,255,0.1)', padding:'12px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+      <div style={{ background:ui.panelBg, borderBottom:`1px solid ${ui.border}`, padding:'12px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', color:dim, cursor:'pointer', fontWeight:700, fontSize:14 }}>← 首頁</button>
         <h1 style={{ fontSize:20, fontWeight:900 }}>🎰 抽獎系統</h1>
-        <div style={{ marginLeft:'auto', display:'flex', gap:6, flexWrap:'wrap' }}>
-          {MODES.map(m => (
-            <button key={m.id} onClick={() => { setMode(m.id); doReset(); }} style={{
-              padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'none', transition:'all 0.2s',
-              background: mode===m.id ? '#facc15' : 'rgba(255,255,255,0.08)',
-              color: mode===m.id ? '#1e293b' : 'rgba(255,255,255,0.65)',
-            }}>{m.e} {m.label}</button>
-          ))}
-        </div>
       </div>
 
-      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+      <div className="lottery-mode-grid">
+        {MODES.map(m => (
+          <button key={m.id} onClick={() => { setMode(m.id); doReset(); }} className={`lottery-mode-card ${mode === m.id ? 'active' : ''}`}>
+            <span style={{ fontSize:28, lineHeight:1 }}>{m.e}</span>
+            <span style={{ minWidth:0 }}>
+              <span style={{ display:'block', fontSize:15, fontWeight:900, marginBottom:3 }}>{m.label}</span>
+              <span style={{ display:'block', fontSize:12, color:mode === m.id ? ui.mutedText : ui.faintText, lineHeight:1.35 }}>{m.desc}</span>
+              <span style={{ display:'block', fontSize:10, color:'rgba(250,204,21,0.72)', marginTop:6, fontWeight:800 }}>{m.hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="lottery-layout">
         {/* ── 左側設定 ── */}
-        <div style={{ width:250, borderRight:'1px solid rgba(255,255,255,0.08)', display:'flex', flexDirection:'column', padding:16, gap:12, overflowY:'auto', flexShrink:0 }}>
+        <div className="lottery-sidebar">
           <div>
             <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>名單 ({names.length} 人 / 剩 {pool.length})</div>
             <textarea value={rawText} onChange={handleText}
               placeholder={'每行一個名字或逗號分隔\n支援 300+ 人\n\n例：\n小明\n小花,大雄\n志玲姐姐'}
-              style={{ width:'100%', height:200, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, color:'#fff', fontSize:13, padding:10, resize:'vertical', outline:'none', lineHeight:1.7 }} />
+              style={{ width:'100%', height:200, background:ui.inputBg, border:`1px solid ${ui.border}`, borderRadius:10, color:ui.text, fontSize:13, padding:10, resize:'vertical', outline:'none', lineHeight:1.7 }} />
           </div>
 
           <div>
             <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>抽出人數</div>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <button onClick={() => setWinCount(w => Math.max(1, w-1))} style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:18, fontWeight:900, cursor:'pointer' }}>−</button>
+              <button onClick={() => setWinCount(w => Math.max(1, w-1))} style={{ width:30, height:30, borderRadius:8, background:ui.subtleBg, border:`1px solid ${ui.border}`, color:ui.text, fontSize:18, fontWeight:900, cursor:'pointer' }}>−</button>
               <input type="number" min="1" value={winCount} onChange={e => setWinCount(Math.max(1, parseInt(e.target.value)||1))}
-                style={{ width:56, textAlign:'center', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:8, color:'#fff', fontSize:18, fontWeight:900, padding:'3px 0', outline:'none' }} />
-              <button onClick={() => setWinCount(w => w+1)} style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:18, fontWeight:900, cursor:'pointer' }}>＋</button>
+                style={{ width:56, textAlign:'center', background:ui.inputBg, border:`1px solid ${ui.borderStrong}`, borderRadius:8, color:ui.text, fontSize:18, fontWeight:900, padding:'3px 0', outline:'none' }} />
+              <button onClick={() => setWinCount(w => w+1)} style={{ width:30, height:30, borderRadius:8, background:ui.subtleBg, border:`1px solid ${ui.border}`, color:ui.text, fontSize:18, fontWeight:900, cursor:'pointer' }}>＋</button>
             </div>
           </div>
 
           <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
-            <div onClick={() => setRemoveWinners(v => !v)} style={{ width:34, height:19, borderRadius:10, background:removeWinners?'#facc15':'rgba(255,255,255,0.15)', transition:'all 0.2s', position:'relative', cursor:'pointer', flexShrink:0 }}>
+            <div onClick={() => setRemoveWinners(v => !v)} style={{ width:34, height:19, borderRadius:10, background:removeWinners?'#facc15':ui.subtleBg, border:`1px solid ${ui.border}`, transition:'all 0.2s', position:'relative', cursor:'pointer', flexShrink:0 }}>
               <div style={{ position:'absolute', top:2, left:removeWinners?16:2, width:15, height:15, borderRadius:'50%', background:'#fff', transition:'left 0.2s' }} />
             </div>
-            <span style={{ fontSize:13, color:'rgba(255,255,255,0.7)' }}>抽出後移除</span>
+            <span style={{ fontSize:13, color:ui.mutedText }}>抽出後移除</span>
           </label>
 
           <div style={{ display:'flex', gap:6 }}>
-            <button onClick={doReset} style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>↺ 重置</button>
-            <button onClick={() => { setPool([...names]); doReset(); }} style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.6)', padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>♻ 還原名單</button>
+            <button onClick={doReset} style={{ flex:1, background:ui.subtleBg, border:`1px solid ${ui.border}`, color:ui.mutedText, padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>↺ 重置</button>
+            <button onClick={() => { setPool([...names]); doReset(); }} style={{ flex:1, background:ui.subtleBg, border:`1px solid ${ui.border}`, color:ui.mutedText, padding:'7px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>♻ 還原名單</button>
           </div>
 
           {/* 歷史 */}
           <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.08em', textTransform:'uppercase', display:'flex', justifyContent:'space-between' }}>
             <span>紀錄</span>
-            <button onClick={() => setHistory([])} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.25)', fontSize:11, cursor:'pointer' }}>清除</button>
+            <button onClick={() => setHistory([])} style={{ background:'none', border:'none', color:ui.faintText, fontSize:11, cursor:'pointer' }}>清除</button>
           </div>
           <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
-            {history.length === 0 && <div style={{ fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center', padding:'10px 0' }}>尚無紀錄</div>}
+            {history.length === 0 && <div style={{ fontSize:12, color:ui.faintText, textAlign:'center', padding:'10px 0' }}>尚無紀錄</div>}
             {history.slice(0, 60).map((h, i) => (
-              <div key={i} style={{ background:'rgba(255,255,255,0.05)', borderRadius:8, padding:'5px 10px', borderLeft:'2px solid #facc15', fontSize:12, fontWeight:700 }}>
+              <div key={i} style={{ background:ui.subtleBg, borderRadius:8, padding:'5px 10px', borderLeft:'2px solid #facc15', fontSize:12, fontWeight:700 }}>
                 {h.name} <span style={{ fontSize:10, color:dim, fontWeight:400 }}>{h.time}</span>
               </div>
             ))}
@@ -3877,20 +4128,20 @@ function LotteryApp({ onBack }) {
         </div>
 
         {/* ── 主畫面 ── */}
-        <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, gap:20, position:'relative', overflow:'hidden', minWidth:0 }}>
+        <div className="lottery-stage">
 
           {/* ⚡ 閃光 */}
           {mode === 'flash' && (
-            <div style={{ width:'100%', maxWidth:700, minHeight:220, background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', padding:20, display:'flex', flexWrap:'wrap', gap:8, alignContent:'center', justifyContent:'center' }}>
+            <div style={{ width:'100%', maxWidth:700, minHeight:220, background:ui.cardBg, borderRadius:20, border:`1px solid ${ui.border}`, padding:20, display:'flex', flexWrap:'wrap', gap:8, alignContent:'center', justifyContent:'center' }}>
               {flashItems.length === 0 && phase==='idle' && <span style={{ color:dim, fontSize:15, fontWeight:700 }}>輸入名單後按開始</span>}
               {flashItems.map((n, i) => {
                 const isW = flashFinal.includes(n);
                 return (
                   <div key={n+i} style={{
                     padding:'8px 18px', borderRadius:50, fontWeight:900, fontSize:Math.max(12, Math.min(20, 280/Math.max(flashItems.length,1))),
-                    background: isW ? 'rgba(250,204,21,0.2)' : 'rgba(255,255,255,0.07)',
-                    border: `2px solid ${isW ? '#facc15' : 'rgba(255,255,255,0.1)'}`,
-                    color: isW ? '#facc15' : '#fff',
+                    background: isW ? 'rgba(250,204,21,0.2)' : ui.subtleBg,
+                    border: `2px solid ${isW ? '#facc15' : ui.border}`,
+                    color: isW ? '#facc15' : ui.text,
                     transform: isW ? 'scale(1.1)' : 'scale(1)',
                     boxShadow: isW ? '0 0 20px rgba(250,204,21,0.4)' : 'none',
                     transition:'all 0.15s',
@@ -3900,150 +4151,13 @@ function LotteryApp({ onBack }) {
             </div>
           )}
 
-          {/* 💥 消除賽 */}
-          {mode === 'eliminate' && (
-            <div style={{ width:'100%', maxWidth:820, maxHeight:'58vh', overflowY:'auto', background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', padding:20 }}>
-              {elimList.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
-              <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center' }}>
-                {elimList.map((n, i) => {
-                  const gone   = elimGone.has(n);
-                  const active = elimPending === n;
-                  const win    = phase==='done' && winners.includes(n);
-                  return (
-                    <div key={n+i} style={{
-                      padding:'7px 16px', borderRadius:50, fontWeight:800, fontSize:14,
-                      background: win ? 'rgba(250,204,21,0.2)' : active ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.07)',
-                      border: `2px solid ${win?'#facc15':active?'#ef4444':'rgba(255,255,255,0.1)'}`,
-                      color: win ? '#facc15' : '#fff',
-                      opacity: gone ? 0.1 : 1,
-                      transform: active ? 'scale(1.15)' : win ? 'scale(1.08)' : gone ? 'scale(0.85)' : 'scale(1)',
-                      transition:'all 0.2s',
-                      userSelect:'none',
-                      boxShadow: win ? '0 0 20px rgba(250,204,21,0.4)' : 'none',
-                    }}>{n}</div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 🔦 聚光燈 */}
-          {mode === 'spotlight' && (
-            <div style={{ width:'100%', maxWidth:740, background:'rgba(0,0,0,0.6)', borderRadius:20, padding:20, minHeight:200, position:'relative', overflow:'hidden' }}>
-              {spotNames.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
-              <div style={{ display:'flex', flexWrap:'wrap', gap:10, justifyContent:'center' }}>
-                {spotNames.map((n, i) => {
-                  const lit = spotlight === i;
-                  const win = phase==='done' && winners.includes(n);
-                  return (
-                    <div key={n+i} style={{
-                      padding:'8px 18px', borderRadius:50, fontWeight:900, fontSize:15,
-                      background: win ? 'rgba(250,204,21,0.25)' : lit ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.04)',
-                      color: win ? '#facc15' : lit ? '#0d0d1a' : 'rgba(255,255,255,0.2)',
-                      border: `2px solid ${win?'#facc15':lit?'#fff':'rgba(255,255,255,0.06)'}`,
-                      transform: (lit||win) ? 'scale(1.12)' : 'scale(1)',
-                      boxShadow: lit ? '0 0 30px rgba(255,255,255,0.6)' : win ? '0 0 25px rgba(250,204,21,0.5)' : 'none',
-                      transition:'all 0.08s',
-                    }}>{n}</div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 🌀 矩陣雨 */}
-          {mode === 'matrix' && (
-            <div style={{ width:'100%', maxWidth:780, background:'#000', borderRadius:20, padding:'20px 12px', minHeight:240, fontFamily:'monospace' }}>
-              {matrixLines.length === 0 && phase==='idle' && <div style={{ color:'#00ff41', fontSize:14, fontWeight:700, textAlign:'center', padding:40, opacity:0.5 }}>{'> 輸入名單後按開始_'}</div>}
-              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 10px', justifyContent:'center' }}>
-                {matrixLines.map((n, i) => {
-                  const isWin = phase==='done' && winners.includes(n);
-                  const isEmpty = !n;
-                  return (
-                    <div key={i} className={phase==='running'?'matrix-cell':''} style={{
-                      fontSize: Math.max(12, Math.min(18, 580 / Math.max(matrixLines.length, 1))),
-                      fontWeight: 900,
-                      color: isEmpty ? 'transparent' : isWin ? '#facc15' : `rgba(0,255,65,${0.4 + Math.random() * 0.6})`,
-                      textShadow: isWin ? '0 0 20px #facc15' : n ? '0 0 8px #00ff41' : 'none',
-                      padding:'2px 6px',
-                      transition:'color 0.2s',
-                    }}>{n || '.'}</div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 🎪 九宮格 */}
-          {mode === 'grid' && (
-            <div style={{ width:'100%', maxWidth:480 }}>
-              {gridNames.length === 0 && phase==='idle' && <div style={{ color:dim, fontSize:15, fontWeight:700, textAlign:'center', padding:40 }}>輸入名單後按開始</div>}
-              {gridNames.length > 0 && (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-                  {gridNames.map((n, i) => {
-                    const active = gridPick === i;
-                    const win    = phase==='done' && i === gridPick;
-                    return (
-                      <div key={i} style={{
-                        background: win ? 'rgba(250,204,21,0.25)' : active ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)',
-                        border: `2px solid ${win?'#facc15':active?'#fff':'rgba(255,255,255,0.1)'}`,
-                        borderRadius:14, padding:'20px 10px', textAlign:'center',
-                        fontWeight:900, fontSize:Math.max(11,Math.min(18,140/Math.max(n.length,1))),
-                        color: win ? '#facc15' : active ? '#fff' : 'rgba(255,255,255,0.6)',
-                        transform: (active||win) ? 'scale(1.06)' : 'scale(1)',
-                        boxShadow: win ? '0 0 30px rgba(250,204,21,0.5)' : active ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
-                        transition:'all 0.08s',
-                        userSelect:'none',
-                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                      }}>{n}</div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 🫧 泡泡 - React DOM 版，不卡 */}
-          {mode === 'bubble' && (
-            <div style={{ width:'100%', maxWidth:600, height:360, background:'rgba(255,255,255,0.03)', borderRadius:20, border:'1px solid rgba(255,255,255,0.08)', position:'relative', overflow:'hidden' }}>
-              {bubbles.length === 0 && phase==='idle' && (
-                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:dim, fontSize:15, fontWeight:700 }}>輸入名單後按開始</div>
-              )}
-              {bubbles.map(b => {
-                const isWin = bubbleWinners.includes(b.name);
-                return (
-                  <div key={b.id} className={isWin ? 'pulse-gold' : ''} style={{
-                    position:'absolute',
-                    left: `${b.x}%`, top: `${b.y}%`,
-                    width: b.r * 2, height: b.r * 2,
-                    marginLeft: -b.r, marginTop: -b.r,
-                    borderRadius:'50%',
-                    background: isWin ? '#facc15' : b.color,
-                    border: `3px solid ${isWin?'#fff':b.color}`,
-                    boxShadow: isWin ? '0 0 24px #facc15' : 'none',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    fontWeight:900, fontSize:Math.max(9, Math.min(15, b.r * 0.55)),
-                    color: isWin ? '#1e293b' : '#fff',
-                    overflow:'hidden',
-                    pointerEvents:'none',
-                    transition:'background 0.3s, box-shadow 0.3s',
-                  }}>
-                    <span style={{ textAlign:'center', padding:'0 4px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth: b.r * 1.8 }}>
-                      {b.name.length > 6 ? b.name.slice(0,5)+'…' : b.name}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {/* 🏁 迷宮賽跑 */}
           {mode === 'race' && (
-            <div style={{ width:'100%', maxWidth:900, display:'flex', gap:12 }}>
+            <div className="lottery-canvas-row">
               {/* Canvas 賽道 */}
               <div style={{ flex:1, minWidth:0 }}>
                 <canvas ref={raceCanvasRef} width={720} height={440}
-                  style={{ width:'100%', height:'auto', borderRadius:16, background:'#0a0a14', border:'1px solid rgba(255,255,255,0.1)', display:'block' }} />
+                  style={{ width:'100%', height:'auto', borderRadius:16, background:ui.canvasBg, border:`1px solid ${ui.border}`, display:'block' }} />
                 {!raceRunning && phase==='idle' && (
                   <div style={{ textAlign:'center', marginTop:12, color:dim, fontSize:14, fontWeight:700 }}>
                     💡 {names.length} 位參賽者 · 前 {winCount} 名獲獎
@@ -4052,11 +4166,11 @@ function LotteryApp({ onBack }) {
               </div>
 
               {/* 排行榜 */}
-              <div style={{ width:170, flexShrink:0, background:'rgba(255,255,255,0.04)', borderRadius:16, border:'1px solid rgba(255,255,255,0.08)', padding:12, maxHeight:440, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+              <div className="lottery-leaderboard">
                 <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8, textAlign:'center', flexShrink:0 }}>🏆 排行榜</div>
                 <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
                   {raceFinishers.length === 0 && phase!=='running' && (
-                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.2)', textAlign:'center', padding:'20px 0' }}>尚未開始</div>
+                    <div style={{ fontSize:12, color:ui.faintText, textAlign:'center', padding:'20px 0' }}>尚未開始</div>
                   )}
                   {raceFinishers.map((name, i) => {
                     const isTop3 = i < 3;
@@ -4065,13 +4179,52 @@ function LotteryApp({ onBack }) {
                     return (
                       <div key={i} style={{
                         padding:'6px 8px', borderRadius:8,
-                        background: isWin ? 'rgba(250,204,21,0.15)' : 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${isWin?'rgba(250,204,21,0.4)':'rgba(255,255,255,0.08)'}`,
+                        background: isWin ? 'rgba(250,204,21,0.15)' : ui.subtleBg,
+                        border: `1px solid ${isWin?'rgba(250,204,21,0.4)':ui.border}`,
                         fontSize:12, fontWeight:800,
-                        color: isTop3 ? '#facc15' : isWin ? '#fff' : 'rgba(255,255,255,0.6)',
+                        color: isTop3 ? '#facc15' : isWin ? ui.text : ui.mutedText,
                         display:'flex', gap:6, alignItems:'center',
                       }}>
                         <span style={{ fontSize: isTop3?14:11, minWidth:22 }}>{emoji}</span>
+                        <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🎯 幸運彈珠台 */}
+          {mode === 'plinko' && (
+            <div className="lottery-canvas-row">
+              <div style={{ flex:1, minWidth:0 }}>
+                <canvas ref={plinkoCanvasRef} width={720} height={440}
+                  style={{ width:'100%', height:'auto', borderRadius:16, background:ui.canvasBg, border:`1px solid ${ui.border}`, display:'block' }} />
+                {!plinkoRunning && phase==='idle' && (
+                  <div style={{ textAlign:'center', marginTop:12, color:dim, fontSize:14, fontWeight:700 }}>
+                    🎯 {names.length} 顆名字球 · 前 {winCount} 顆進入金色得獎槽
+                  </div>
+                )}
+              </div>
+
+              <div className="lottery-leaderboard">
+                <div style={{ fontSize:11, fontWeight:700, color:dim, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8, textAlign:'center', flexShrink:0 }}>🎯 得獎槽</div>
+                <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
+                  {plinkoFinishers.length === 0 && phase!=='running' && (
+                    <div style={{ fontSize:12, color:ui.faintText, textAlign:'center', padding:'20px 0' }}>尚未開始</div>
+                  )}
+                  {plinkoFinishers.map((name, i) => {
+                    const emoji = i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `${i+1}.`;
+                    return (
+                      <div key={`${name}-${i}`} style={{
+                        padding:'7px 8px', borderRadius:8,
+                        background:'rgba(250,204,21,0.15)',
+                        border:'1px solid rgba(250,204,21,0.4)',
+                        fontSize:12, fontWeight:900, color:i < 3 ? '#facc15' : ui.text,
+                        display:'flex', gap:6, alignItems:'center',
+                      }}>
+                        <span style={{ fontSize:i < 3 ? 14 : 11, minWidth:22 }}>{emoji}</span>
                         <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</span>
                       </div>
                     );
@@ -4086,7 +4239,7 @@ function LotteryApp({ onBack }) {
             <div style={{ width:'100%', maxWidth:900, position:'relative' }}>
               {/* 倒數 */}
               {hCD > 0 && (
-                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', zIndex:30, background:'rgba(0,0,0,0.6)', borderRadius:20, backdropFilter:'blur(4px)' }}>
+                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', zIndex:30, background:ui.overlay, borderRadius:20, backdropFilter:'blur(4px)' }}>
                   <div style={{ fontSize:'clamp(72px,14vw,160px)', fontWeight:900, color:'#facc15', textShadow:'0 0 50px rgba(250,204,21,0.6)' }}>{hCD}</div>
                 </div>
               )}
@@ -4132,27 +4285,27 @@ function LotteryApp({ onBack }) {
 
               {/* 賽馬設定（小型行內） */}
               {phase === 'idle' && (
-                <div style={{ marginTop:16, background:'rgba(255,255,255,0.04)', borderRadius:14, padding:14, border:'1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ marginTop:16, background:ui.cardBg, borderRadius:14, padding:14, border:`1px solid ${ui.border}` }}>
                   <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center', justifyContent:'center' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontWeight:700 }}>格數</span>
+                      <span style={{ fontSize:11, color:ui.mutedText, fontWeight:700 }}>格數</span>
                       <input type="number" min="5" max="100" value={hTrack} onChange={e => setHTrack(Math.max(5, parseInt(e.target.value)||20))}
-                        style={{ width:52, padding:'4px 6px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                        style={{ width:52, padding:'4px 6px', borderRadius:8, background:ui.inputBg, border:`1px solid ${ui.borderStrong}`, color:ui.text, fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
                     </div>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontWeight:700 }}>步數</span>
+                      <span style={{ fontSize:11, color:ui.mutedText, fontWeight:700 }}>步數</span>
                       <input type="number" min="0" max="20" value={hMin} onChange={e => setHMin(Math.max(0, parseInt(e.target.value)||0))}
-                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
-                      <span style={{ color:'rgba(255,255,255,0.3)' }}>~</span>
+                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:ui.inputBg, border:`1px solid ${ui.borderStrong}`, color:ui.text, fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                      <span style={{ color:ui.faintText }}>~</span>
                       <input type="number" min="1" max="20" value={hMax} onChange={e => setHMax(Math.max(1, parseInt(e.target.value)||5))}
-                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', color:'#fff', fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
+                        style={{ width:42, padding:'4px 4px', borderRadius:8, background:ui.inputBg, border:`1px solid ${ui.borderStrong}`, color:ui.text, fontSize:14, fontWeight:900, textAlign:'center', outline:'none' }} />
                     </div>
                     {horses.map((h, i) => (
                       <div key={i} style={{ display:'flex', alignItems:'center', gap:3 }}>
                         <input type="text" value={h.emoji} onChange={e => setHorses(hs => hs.map((x,j) => j===i?{...x,emoji:e.target.value}:x))}
-                          style={{ width:32, textAlign:'center', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:6, color:'#fff', fontSize:16, padding:'2px 0', outline:'none' }} />
+                          style={{ width:32, textAlign:'center', background:ui.inputBg, border:`1px solid ${ui.border}`, borderRadius:6, color:ui.text, fontSize:16, padding:'2px 0', outline:'none' }} />
                         <input type="text" value={h.name} onChange={e => setHorses(hs => hs.map((x,j) => j===i?{...x,name:e.target.value}:x))}
-                          style={{ width:50, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:6, color:'#fff', fontSize:11, fontWeight:700, padding:'4px 5px', outline:'none' }} />
+                          style={{ width:50, background:ui.inputBg, border:`1px solid ${ui.border}`, borderRadius:6, color:ui.text, fontSize:11, fontWeight:700, padding:'4px 5px', outline:'none' }} />
                       </div>
                     ))}
                   </div>
@@ -4161,10 +4314,10 @@ function LotteryApp({ onBack }) {
 
               {/* 冠軍彈窗 */}
               {phase === 'done' && hFinish.length > 0 && hFinish.length >= horses.length && (
-                <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.75)', backdropFilter:'blur(6px)', zIndex:50 }}
+                <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:ui.overlay, backdropFilter:'blur(6px)', zIndex:50 }}
                   onClick={() => { setPhase('idle'); setHorses(h => h.map(x => ({...x, pos:0}))); setHFinish([]); }}>
                   <div className="winner-pop" onClick={e => e.stopPropagation()} style={{
-                    background:'linear-gradient(135deg,#1e1b4b,#0f172a)', border:'2px solid rgba(250,204,21,0.5)',
+                    background:ui.modalBg, border:'2px solid rgba(250,204,21,0.5)',
                     borderRadius:28, padding:'36px 48px', textAlign:'center', boxShadow:'0 0 100px rgba(250,204,21,0.4)', maxWidth:420, width:'90%',
                   }}>
                     <div style={{ fontSize:56, marginBottom:8 }}>🏆</div>
@@ -4173,17 +4326,17 @@ function LotteryApp({ onBack }) {
                       <div key={i} style={{
                         display:'flex', alignItems:'center', gap:10, justifyContent:'center',
                         padding:'7px 14px', borderRadius:12, marginBottom:6,
-                        background: i===0?'rgba(250,204,21,0.18)':'rgba(255,255,255,0.04)',
-                        border:`1px solid ${i===0?'rgba(250,204,21,0.5)':'rgba(255,255,255,0.08)'}`,
+                        background: i===0?'rgba(250,204,21,0.18)':ui.subtleBg,
+                        border:`1px solid ${i===0?'rgba(250,204,21,0.5)':ui.border}`,
                       }}>
                         <span style={{ fontSize:18 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`}</span>
                         <span style={{ fontSize:22 }}>{f.emoji}</span>
-                        <span style={{ fontWeight:900, fontSize:17, color:i===0?'#facc15':'#fff' }}>{f.name}</span>
+                        <span style={{ fontWeight:900, fontSize:17, color:i===0?'#facc15':ui.text }}>{f.name}</span>
                       </div>
                     ))}
                     <button onClick={() => { setPhase('idle'); setHorses(h => h.map(x => ({...x, pos:0}))); setHFinish([]); }} style={{
-                      marginTop:16, background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)',
-                      color:'rgba(255,255,255,0.7)', padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer',
+                      marginTop:16, background:ui.subtleBg, border:`1px solid ${ui.border}`,
+                      color:ui.mutedText, padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer',
                     }}>關閉</button>
                   </div>
                 </div>
@@ -4194,8 +4347,8 @@ function LotteryApp({ onBack }) {
           {/* 開始按鈕 */}
           <button onClick={handleStart} disabled={cannotStart} style={{
             padding:'13px 48px', borderRadius:50, fontSize:19, fontWeight:900, cursor: cannotStart?'not-allowed':'pointer', border:'none',
-            background: cannotStart ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg,#facc15,#f59e0b)',
-            color: cannotStart ? 'rgba(255,255,255,0.35)' : '#1e293b',
+            background: cannotStart ? ui.subtleBg : 'linear-gradient(135deg,#facc15,#f59e0b)',
+            color: cannotStart ? ui.faintText : '#1e293b',
             boxShadow: cannotStart ? 'none' : '0 0 40px rgba(250,204,21,0.5)',
             transition:'all 0.2s',
           }}>
@@ -4204,10 +4357,10 @@ function LotteryApp({ onBack }) {
 
           {/* 得獎彈窗 */}
           {phase === 'done' && winners.length > 0 && (
-            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.78)', backdropFilter:'blur(6px)', zIndex:50 }}
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:ui.overlay, backdropFilter:'blur(6px)', zIndex:50 }}
               onClick={() => setPhase('idle')}>
               <div className="winner-pop" onClick={e => e.stopPropagation()}
-                style={{ background:'linear-gradient(135deg,#1e1b4b,#0f172a)', border:'2px solid rgba(250,204,21,0.5)', borderRadius:28, padding:'40px 52px', textAlign:'center', boxShadow:'0 0 100px rgba(250,204,21,0.4)', maxWidth:540, width:'92%' }}>
+                style={{ background:ui.modalBg, border:'2px solid rgba(250,204,21,0.5)', borderRadius:28, padding:'40px 52px', textAlign:'center', boxShadow:'0 0 100px rgba(250,204,21,0.4)', maxWidth:540, width:'92%' }}>
                 <div style={{ fontSize: winners.length>1 ? 40:64, marginBottom:12 }}>🎉</div>
                 <div style={{ fontSize:12, fontWeight:700, color:'rgba(250,204,21,0.8)', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:14 }}>恭喜得獎</div>
                 {winners.length === 1 ? (
@@ -4219,7 +4372,7 @@ function LotteryApp({ onBack }) {
                     ))}
                   </div>
                 )}
-                <button onClick={() => setPhase('idle')} style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', color:'rgba(255,255,255,0.7)', padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer' }}>關閉</button>
+                <button onClick={() => setPhase('idle')} style={{ background:ui.subtleBg, border:`1px solid ${ui.border}`, color:ui.mutedText, padding:'10px 32px', borderRadius:20, fontSize:14, fontWeight:700, cursor:'pointer' }}>關閉</button>
               </div>
             </div>
           )}
@@ -4406,7 +4559,7 @@ function LiveScoreOperator({ onBack }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans flex flex-col">
+    <div className="kurage-control-bg min-h-screen bg-slate-100 font-sans flex flex-col">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm">
@@ -4603,7 +4756,7 @@ function LiveScoreViewer({ onBack }) {
   if (!visible) {
     return (
       <div style={{ width:'100vw', height:'100vh', background:'transparent', position:'relative' }}>
-        <button onClick={onBack} style={{
+        <button onClick={onBack} className="kurage-floating-control" style={{
           position:'absolute', top:14, left:14, zIndex:50,
           background:'rgba(0,0,0,0.55)', color:'#fff', border:'none',
           padding:'5px 14px', borderRadius:8, fontSize:13, fontWeight:700,
@@ -4708,7 +4861,7 @@ function LiveScoreViewer({ onBack }) {
       style={{ width:'100vw', height:'100vh', background:'transparent', position:'relative', fontFamily:'sans-serif' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
-      <button onClick={onBack} style={{
+      <button onClick={onBack} className="kurage-floating-control" style={{
         position:'absolute', top:14, left:14, zIndex:300,
         background:'rgba(0,0,0,0.55)', color:'#fff', border:'none',
         padding:'5px 14px', borderRadius:8, fontSize:13, fontWeight:700,
@@ -4728,7 +4881,7 @@ function LiveScoreViewer({ onBack }) {
             }}>重置位置</button>
           </>
         )}
-        <button onClick={() => setEditMode(v => !v)} style={{
+        <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{
           background: editMode ? '#facc15' : 'rgba(0,0,0,0.45)',
           color: editMode ? '#1e293b' : '#fff',
           border: editMode ? 'none' : '1px solid rgba(255,255,255,0.2)',
@@ -4955,12 +5108,30 @@ function getInitialView() {
 
 export default function App() {
   const [view, setView] = useState(getInitialView);
+  const [theme, setTheme] = useState(getInitialTheme);
+  const themeTokens = getThemeTokens(theme);
   const ViewComponent = view === 'home' ? HomePage : (VIEW_COMPONENTS[view] ?? HomePage);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage?.setItem(THEME_STORAGE_KEY, theme);
+    document.body.dataset.kurageTheme = theme;
+  }, [theme]);
+
   return (
-    <ViewComponent
-      onBack={() => setView('home')}
-      onNavigate={setView}
-    />
+    <div
+      className="kurage-app-theme"
+      data-theme={theme}
+      style={{ '--kurage-page-bg': themeTokens.pageBg, '--kurage-text': themeTokens.text }}
+    >
+      <style>{GLOBAL_THEME_CSS}</style>
+      <ViewComponent
+        onBack={() => setView('home')}
+        onNavigate={setView}
+        theme={theme}
+        themeTokens={themeTokens}
+        onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+      />
+    </div>
   );
 }
