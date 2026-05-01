@@ -348,7 +348,7 @@ function ChangePasswordSection({ accentColor }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 首頁（模式選擇）── 完全自由拖曳定位
+// 首頁（模式選擇）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const LOBBY_DEFAULT = {
@@ -363,19 +363,27 @@ const LOBBY_DEFAULT = {
     { id: 'viewer',            label: '觀眾視角',       desc: 'OBS / 轉播用乾淨畫面',  order: 2 },
     { id: 'bracket_operator',  label: '對戰表控制台',   desc: '管理 8 強賽事對戰表',    order: 3 },
     { id: 'bracket_viewer',    label: '對戰表展示',     desc: 'OBS 用對戰表畫面',      order: 4 },
+    { id: 'scoreboard_operator', label: '記分板控制台', desc: '管理兩隊即時比分',       order: 5 },
+    { id: 'scoreboard_viewer', label: '記分板展示',     desc: 'OBS / 轉播用畫面',      order: 6 },
+    { id: 'lottery',           label: '抽獎系統',       desc: '閃光 / 消除 / 泡泡抽獎', order: 7 },
+    { id: 'live_operator',     label: '實況計分板控制', desc: '即時對局計分',           order: 8 },
+    { id: 'live_viewer',       label: '實況計分板展示', desc: '疊加在遊戲畫面上方',     order: 9 },
   ],
 };
 
 const DEFAULT_POSITIONS = {
   title:              { x: 50, y: 14 },
   subtitle:           { x: 50, y: 23 },
-  multiplayer:        { x: 12, y: 60 },
-  operator:           { x: 28, y: 60 },
-  viewer:             { x: 44, y: 60 },
-  bracket_operator:   { x: 60, y: 60 },
-  bracket_viewer:     { x: 76, y: 60 },
-  scoreboard_operator:{ x: 88, y: 78 },
-  scoreboard_viewer:  { x: 88, y: 88 },
+  multiplayer:        { x: 18, y: 55 },
+  viewer:             { x: 34, y: 55 },
+  bracket_viewer:     { x: 50, y: 55 },
+  scoreboard_viewer:  { x: 66, y: 55 },
+  live_viewer:        { x: 82, y: 55 },
+  lottery:            { x: 50, y: 78 },
+  operator:           { x: 26, y: 78 },
+  bracket_operator:   { x: 38, y: 78 },
+  scoreboard_operator:{ x: 62, y: 78 },
+  live_operator:      { x: 74, y: 78 },
 };
 
 const BUTTON_ICON_MAP = {
@@ -393,12 +401,63 @@ const BUTTON_ICON_MAP = {
 
 const PROTECTED_VIEWS = new Set(['operator', 'bracket_operator', 'scoreboard_operator', 'live_operator']);
 
+const LOBBY_ENTRY_META = [
+  { id: 'multiplayer', label: '多人連線 BP', desc: '雙方即時禁用與選角', kind: 'public', kicker: 'BP ROOM', color: '#38bdf8' },
+  { id: 'viewer', label: '觀眾視角', desc: 'OBS / 轉播用乾淨畫面', kind: 'public', kicker: 'BROADCAST', color: '#60a5fa' },
+  { id: 'bracket_viewer', label: '對戰表展示', desc: 'OBS 用 8 強對戰表', kind: 'public', kicker: 'BRACKET', color: '#facc15' },
+  { id: 'scoreboard_viewer', label: '記分板展示', desc: 'OBS / 轉播用比分畫面', kind: 'public', kicker: 'SCOREBOARD', color: '#a78bfa' },
+  { id: 'live_viewer', label: '實況計分板展示', desc: '疊加在遊戲畫面上方', kind: 'public', kicker: 'LIVE OVERLAY', color: '#34d399' },
+  { id: 'lottery', label: '抽獎系統', desc: '閃光 / 消除 / 泡泡抽獎', kind: 'public', kicker: 'DRAW', color: '#f472b6' },
+  { id: 'operator', label: '操作者控制台', desc: '手動管理賽事 BP 顯示', kind: 'protected', kicker: 'BP CONTROL', color: '#f59e0b' },
+  { id: 'bracket_operator', label: '對戰表控制台', desc: '管理 8 強賽事對戰表', kind: 'protected', kicker: 'BRACKET CONTROL', color: '#facc15' },
+  { id: 'scoreboard_operator', label: '記分板控制台', desc: '管理兩隊即時比分', kind: 'protected', kicker: 'SCORE CONTROL', color: '#a78bfa' },
+  { id: 'live_operator', label: '實況計分板控制', desc: '即時對局計分', kind: 'protected', kicker: 'LIVE CONTROL', color: '#34d399' },
+];
+
+const EDIT_MODE_ENTRY = {
+  id: 'editmode',
+  label: '版面微調',
+  desc: '調整自由拖曳位置',
+  kind: 'protected',
+  kicker: 'LAYOUT',
+  color: '#facc15',
+};
+
 function getButtonIcon(id) {
   return BUTTON_ICON_MAP[id] ?? MonitorPlay;
 }
 
 function isProtectedView(id) {
   return PROTECTED_VIEWS.has(id);
+}
+
+function normalizeLobbyConfig(config) {
+  const merged = {
+    ...LOBBY_DEFAULT,
+    ...(config ?? {}),
+  };
+  return {
+    ...merged,
+    title: typeof merged.title === 'string' ? merged.title : LOBBY_DEFAULT.title,
+    subtitle: typeof merged.subtitle === 'string' ? merged.subtitle : LOBBY_DEFAULT.subtitle,
+    bgType: merged.bgType === 'image' ? 'image' : 'color',
+    bgValue: typeof merged.bgValue === 'string' ? merged.bgValue : LOBBY_DEFAULT.bgValue,
+    accentColor: typeof merged.accentColor === 'string' ? merged.accentColor : LOBBY_DEFAULT.accentColor,
+    buttons: Array.isArray(merged.buttons) ? merged.buttons : LOBBY_DEFAULT.buttons,
+  };
+}
+
+function getLobbyEntries(config) {
+  const overrides = new Map((config.buttons ?? []).map(btn => [btn.id, btn]));
+  return LOBBY_ENTRY_META.map((entry, order) => {
+    const override = overrides.get(entry.id);
+    return {
+      ...entry,
+      label: override?.label || entry.label,
+      desc: override?.desc || entry.desc,
+      order,
+    };
+  });
 }
 
 
@@ -408,9 +467,16 @@ function HomePage({ onNavigate }) {
   const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
   const [editMode, setEditMode]       = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen]     = useState(false);
   const [draft, setDraft]             = useState(null);
   const [gateTarget, setGateTarget]   = useState(null);
-  const [isMobile, setIsMobile]       = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const safeConfig = useMemo(() => normalizeLobbyConfig(config), [config]);
+  const entries = useMemo(() => getLobbyEntries(safeConfig), [safeConfig]);
+  const publicEntries = useMemo(() => entries.filter(entry => entry.kind === 'public'), [entries]);
+  const managementEntries = useMemo(() => [
+    ...entries.filter(entry => entry.kind === 'protected'),
+    { ...EDIT_MODE_ENTRY, color: safeConfig.accentColor },
+  ], [entries, safeConfig.accentColor]);
 
   // ── 拖曳狀態（useRef 必須在 useEffect 之前宣告）──
   const draggingRef   = useRef(null);
@@ -425,13 +491,6 @@ function HomePage({ onNavigate }) {
 
   useEffect(() => { positionsRef.current = positions; }, [positions]);
 
-  // ── 手機偵測 resize 監聽 ──
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
   // ── 全部改成 function 宣告，避免 Terser/esbuild TDZ 問題 ──
   function savePositions(pos) { setFbPositions(pos); }
 
@@ -443,7 +502,7 @@ function HomePage({ onNavigate }) {
     const rect = containerRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const curPos  = positionsRef.current[id];
+    const curPos  = positionsRef.current[id] ?? DEFAULT_POSITIONS[id] ?? { x: 50, y: 50 };
     const elemX = rect.left + (curPos.x / 100) * rect.width;
     const elemY = rect.top  + (curPos.y / 100) * rect.height;
     offsetRef.current = { x: clientX - elemX, y: clientY - elemY };
@@ -470,7 +529,11 @@ function HomePage({ onNavigate }) {
   }
 
   function openSettings() { setGateTarget('settings'); }
-  function openSettingsAfterAuth() { setDraft(JSON.parse(JSON.stringify(config))); setSettingsOpen(true); }
+  function openSettingsAfterAuth() {
+    setDraft(JSON.parse(JSON.stringify(safeConfig)));
+    setSettingsOpen(true);
+    setToolsOpen(false);
+  }
   function saveSettings() { setConfig(draft); setSettingsOpen(false); }
   function resetAll() {
     setDraft(JSON.parse(JSON.stringify(LOBBY_DEFAULT)));
@@ -478,27 +541,13 @@ function HomePage({ onNavigate }) {
     setFbPositions(DEFAULT_POSITIONS);
     setPositions({ ...DEFAULT_POSITIONS });
   }
-  function moveButton(idx, dir) {
-    const btns = [...draft.buttons];
-    const target = idx + dir;
-    if (target < 0 || target >= btns.length) return;
-    [btns[idx], btns[target]] = [btns[target], btns[idx]];
-    btns.forEach((b, i) => (b.order = i));
-    setDraft({ ...draft, buttons: btns });
-  }
-
-  const bgStyle = useMemo(() => (
-    config.bgType === 'image' && config.bgValue.startsWith('http')
-      ? { backgroundImage: `url(${config.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : { backgroundColor: config.bgValue }
-  ), [config.bgType, config.bgValue]);
-
   // ── 拖曳元素的共用 wrapper 樣式（桌機用） ──
   function draggableStyle(id) {
+    const fallback = DEFAULT_POSITIONS[id] ?? { x: 50, y: 50 };
     return {
       position: 'absolute',
-      left: `${positions[id]?.x ?? DEFAULT_POSITIONS[id].x}%`,
-      top:  `${positions[id]?.y ?? DEFAULT_POSITIONS[id].y}%`,
+      left: `${positions[id]?.x ?? fallback.x}%`,
+      top:  `${positions[id]?.y ?? fallback.y}%`,
       transform: 'translate(-50%, -50%)',
       cursor: editMode ? 'grab' : 'default',
       userSelect: 'none',
@@ -508,560 +557,291 @@ function HomePage({ onNavigate }) {
 
   const editRing = editMode ? 'ring-2 ring-dashed ring-yellow-400/70 rounded-2xl p-1' : '';
 
-  const sortedButtons = useMemo(() => [...config.buttons].sort((a, b) => a.order - b.order), [config.buttons]);
-
   function handleModeClick(id) {
+    if (id === 'editmode') {
+      setGateTarget('editmode');
+      return;
+    }
     if (isProtectedView(id)) setGateTarget(id);
     else onNavigate(id);
   }
 
-  // ════════════════════════════════
-  // 手機版佈局
-  // ════════════════════════════════
-  if (isMobile) {
+  function handleGateSuccess() {
+    const t = gateTarget;
+    setGateTarget(null);
+    setToolsOpen(false);
+    if (t === 'settings') openSettingsAfterAuth();
+    if (t === 'operator') onNavigate('operator');
+    if (t === 'bracket_operator') onNavigate('bracket_operator');
+    if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
+    if (t === 'live_operator') onNavigate('live_operator');
+    if (t === 'editmode') setEditMode(true);
+  }
+
+  const bgStyle = useMemo(() => (
+    safeConfig.bgType === 'image' && safeConfig.bgValue.startsWith('http')
+      ? { backgroundImage: `url(${safeConfig.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : { backgroundColor: safeConfig.bgValue }
+  ), [safeConfig.bgType, safeConfig.bgValue]);
+
+  function renderEntryCard(entry, compact = false) {
+    const Icon = getButtonIcon(entry.id);
+    const locked = entry.id === 'editmode' || isProtectedView(entry.id);
     return (
-      <div className="w-screen h-screen flex flex-col font-sans relative overflow-hidden" style={bgStyle} translate="no">
-        {config.bgType === 'image' && <div className="absolute inset-0 bg-black/50 pointer-events-none" />}
-
-        {/* 右上角設定按鈕 */}
-        <div className="absolute top-3 right-3 z-50">
-          <button onClick={openSettings}
-            className="p-2.5 rounded-xl bg-white/10 active:bg-white/20 border border-white/20 relative"
-          >
-            <Palette size={18} className="text-white" />
-            <Lock size={8} className="absolute top-1 right-1 text-yellow-400" />
-          </button>
+      <button
+        key={entry.id}
+        onClick={() => handleModeClick(entry.id)}
+        className={`group relative flex w-full text-left transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-yellow-300/80
+          ${compact
+            ? 'items-center gap-4 rounded-lg border border-white/10 bg-white/[0.055] px-4 py-3 hover:border-white/20 hover:bg-white/[0.08]'
+            : 'min-h-[138px] flex-col justify-between rounded-lg border border-white/10 bg-white/[0.055] p-5 shadow-lg shadow-black/20 backdrop-blur hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.08]'}`}
+      >
+        <div
+          className={`shrink-0 rounded-lg border border-white/10 flex items-center justify-center ${compact ? 'h-11 w-11' : 'h-12 w-12 mb-5'}`}
+          style={{ backgroundColor: `${entry.color}1f` }}
+        >
+          <Icon size={compact ? 21 : 24} style={{ color: entry.color }} />
         </div>
-
-        {/* 主內容：垂直置中 */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 py-8 gap-6">
-          {/* 標題區 */}
-          <div className="text-center">
-            <h1
-              className="text-3xl font-black italic tracking-tighter drop-shadow-lg leading-tight"
-              style={{ color: config.accentColor }}
-            >
-              {config.title}
-            </h1>
-            <p className="text-white/50 text-sm mt-2">{config.subtitle}</p>
+        <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase text-white/35">{entry.kicker}</span>
+            {locked && <Lock size={10} className="text-yellow-300/80" />}
           </div>
-
-          {/* 按鈕列：垂直堆疊，橫向排列 icon + 文字 */}
-          <div className="w-full max-w-xs flex flex-col gap-3">
-            {sortedButtons.map(btn => {
-              const Icon = getButtonIcon(btn.id);
-              return (
-                <button
-                  key={btn.id}
-                  onClick={() => handleModeClick(btn.id)}
-                  className="flex items-center gap-4 w-full px-5 py-4 bg-white/8 backdrop-blur-sm rounded-2xl border border-white/10 active:bg-white/15 transition-all shadow-lg relative"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
-                  onTouchStart={e => e.currentTarget.style.borderColor = config.accentColor}
-                  onTouchEnd={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
-                >
-                  <div className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${config.accentColor}20` }}>
-                    <Icon size={22} style={{ color: config.accentColor }} />
-                  </div>
-                  <div className="text-left flex-1 min-w-0">
-                    <div className="text-white font-black text-base leading-tight">{btn.label}</div>
-                    <div className="text-white/40 text-xs mt-0.5 truncate">{btn.desc}</div>
-                  </div>
-                  {isProtectedView(btn.id) && (
-                    <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 固定的對戰表按鈕（永遠顯示） */}
-          <div className="w-full max-w-xs flex flex-col gap-2 mt-1">
-            <div className="h-px bg-white/10" />
-            <button
-              onClick={() => setGateTarget('bracket_operator')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all relative"
-              style={{ backgroundColor: 'rgba(250,204,21,0.08)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/15">
-                <Trophy size={20} className="text-yellow-400" />
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">對戰表控制台</div>
-                <div className="text-white/40 text-xs mt-0.5">管理 8 強賽事對戰表</div>
-              </div>
-              <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
-            </button>
-            <button
-              onClick={() => onNavigate('bracket_viewer')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
-              style={{ backgroundColor: 'rgba(59,130,246,0.08)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-blue-400/15">
-                <Trophy size={20} className="text-blue-400" />
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">對戰表展示</div>
-                <div className="text-white/40 text-xs mt-0.5">OBS / 轉播用乾淨畫面</div>
-              </div>
-            </button>
-            <button
-              onClick={() => setGateTarget('scoreboard_operator')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all relative"
-              style={{ backgroundColor: 'rgba(250,204,21,0.06)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/10">
-                <Star size={20} className="text-yellow-400" />
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">記分板控制台</div>
-                <div className="text-white/40 text-xs mt-0.5">管理兩隊即時比分</div>
-              </div>
-              <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
-            </button>
-            <button
-              onClick={() => onNavigate('scoreboard_viewer')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
-              style={{ backgroundColor: 'rgba(59,130,246,0.06)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-blue-400/10">
-                <Star size={20} className="text-blue-400" />
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">記分板展示</div>
-                <div className="text-white/40 text-xs mt-0.5">OBS / 轉播用畫面</div>
-              </div>
-            </button>
-            <button
-              onClick={() => onNavigate('lottery')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
-              style={{ backgroundColor: 'rgba(168,85,247,0.08)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-purple-400/10">
-                <span style={{ fontSize: 20 }}>🎰</span>
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">抽獎系統</div>
-                <div className="text-white/40 text-xs mt-0.5">閃光 / 消除 / 泡泡 抽獎</div>
-              </div>
-            </button>
-            <button
-              onClick={() => setGateTarget('live_operator')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all relative"
-              style={{ backgroundColor: 'rgba(34,197,94,0.08)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-400/10">
-                <span style={{ fontSize: 20 }}>📺</span>
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">實況計分板控制</div>
-                <div className="text-white/40 text-xs mt-0.5">即時對局計分（OBS 用）</div>
-              </div>
-              <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
-            </button>
-            <button
-              onClick={() => onNavigate('live_viewer')}
-              className="flex items-center gap-4 w-full px-5 py-3 rounded-2xl border border-white/10 transition-all"
-              style={{ backgroundColor: 'rgba(34,197,94,0.06)' }}
-            >
-              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-400/10">
-                <span style={{ fontSize: 20 }}>📺</span>
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="text-white font-black text-sm leading-tight">實況計分板展示</div>
-                <div className="text-white/40 text-xs mt-0.5">疊加在遊戲畫面上方</div>
-              </div>
-            </button>
-          </div>
+          <h2 className={`${compact ? 'text-base' : 'text-xl'} mt-1 font-black leading-tight text-white`}>{entry.label}</h2>
+          <p className={`${compact ? 'text-xs truncate' : 'text-sm leading-relaxed'} mt-1 text-white/48`}>{entry.desc}</p>
         </div>
+        {!compact && <ArrowRightLeft size={18} className="absolute bottom-5 right-5 text-white/20 transition group-hover:text-white/45" />}
+      </button>
+    );
+  }
 
-        {/* 密碼鎖 */}
-        {gateTarget && (
-          <PasswordGate
-            target={gateTarget}
-            onSuccess={() => {
-              const t = gateTarget;
-              setGateTarget(null);
-              if (t === 'settings') openSettingsAfterAuth();
-              if (t === 'operator') onNavigate('operator');
-              if (t === 'bracket_operator') onNavigate('bracket_operator');
-              if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
-              if (t === 'live_operator') onNavigate('live_operator');
-            }}
-            onCancel={() => setGateTarget(null)}
-          />
-        )}
-
-        {/* 外觀設定側邊欄 */}
-        {settingsOpen && draft && (
-          <div className="fixed inset-0 z-50 flex">
-            <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)} />
-            <div className="w-full max-w-sm bg-[#0f172a] border-l border-slate-700 flex flex-col shadow-2xl overflow-y-auto">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-                <h2 className="text-base font-black text-white flex items-center gap-2"><Palette size={16} className="text-yellow-400" /> 外觀設定</h2>
-                <button onClick={() => setSettingsOpen(false)} className="p-1 text-slate-400 hover:text-white"><X size={20} /></button>
+  function renderSettingsPanel() {
+    if (!settingsOpen || !draft) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex">
+        <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)} />
+        <div className="flex w-full max-w-sm flex-col overflow-y-auto border-l border-slate-700 bg-[#0f172a] shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
+            <h2 className="flex items-center gap-2 text-base font-black text-white"><Palette size={16} className="text-yellow-400" /> 外觀設定</h2>
+            <button onClick={() => setSettingsOpen(false)} className="p-1 text-slate-400 transition hover:text-white"><X size={20} /></button>
+          </div>
+          <div className="flex-1 space-y-5 overflow-y-auto p-5 text-sm">
+            <section>
+              <label className="mb-2 block font-bold text-slate-300">主標題</label>
+              <input type="text" value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />
+            </section>
+            <section>
+              <label className="mb-2 block font-bold text-slate-300">副標題</label>
+              <input type="text" value={draft.subtitle} onChange={e => setDraft({ ...draft, subtitle: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />
+            </section>
+            <section>
+              <label className="mb-2 block font-bold text-slate-300">背景</label>
+              <div className="mb-3 flex gap-2">
+                {['color','image'].map(t => (
+                  <button key={t} onClick={() => setDraft({ ...draft, bgType: t })} className={`flex-1 rounded-lg border py-1.5 text-sm font-bold transition ${draft.bgType === t ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-800 text-slate-300 border-slate-600 hover:border-yellow-400'}`}>{t === 'color' ? '純色' : '圖片'}</button>
+                ))}
               </div>
-              <div className="flex-1 p-4 space-y-5 text-sm overflow-y-auto">
-                <section>
-                  <label className="block font-bold text-slate-300 mb-2">🏷 主標題</label>
-                  <input type="text" value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />
-                </section>
-                <section>
-                  <label className="block font-bold text-slate-300 mb-2">💬 副標題</label>
-                  <input type="text" value={draft.subtitle} onChange={e => setDraft({ ...draft, subtitle: e.target.value })} className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />
-                </section>
-                <section>
-                  <label className="block font-bold text-slate-300 mb-2">🖼 背景</label>
-                  <div className="flex gap-2 mb-3">
-                    {['color','image'].map(t => (
-                      <button key={t} onClick={() => setDraft({ ...draft, bgType: t })} className={`flex-1 py-1.5 rounded-lg border font-bold transition text-sm ${draft.bgType === t ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-800 text-slate-300 border-slate-600'}`}>{t === 'color' ? '純色' : '圖片'}</button>
-                    ))}
-                  </div>
-                  {draft.bgType === 'color'
-                    ? <div className="flex items-center gap-3"><input type="color" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-12 h-10 rounded cursor-pointer border-0 bg-transparent" /><input type="text" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="flex-1 bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 font-mono text-sm" /></div>
-                    : <input type="text" placeholder="https://..." value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />}
-                </section>
-                <section>
-                  <label className="block font-bold text-slate-300 mb-2">🎨 強調色</label>
-                  <div className="flex items-center gap-3 mb-2">
-                    <input type="color" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="w-12 h-10 rounded cursor-pointer border-0 bg-transparent" />
-                    <input type="text" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="flex-1 bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 font-mono text-sm" />
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {['#facc15','#22d3ee','#34d399','#f472b6','#a78bfa','#fb923c','#ffffff'].map(c => (
-                      <button key={c} onClick={() => setDraft({ ...draft, accentColor: c })} className="w-7 h-7 rounded-full border-2 border-slate-600 hover:scale-110 transition" style={{ backgroundColor: c }} />
-                    ))}
-                  </div>
-                </section>
-                <section>
-                  <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字</label>
-                  <div className="space-y-3">
-                    {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                      const Icon = getButtonIcon(btn.id);
-                      return (
-                        <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Icon size={13} style={{ color: draft.accentColor }} />
-                            <span className="text-slate-400 text-xs uppercase tracking-widest font-bold flex-1">{btn.id}</span>
-                            <button onClick={() => moveButton(idx, -1)} disabled={idx === 0} className="p-1 text-slate-400 hover:text-white disabled:opacity-30"><ChevronUp size={13} /></button>
-                            <button onClick={() => moveButton(idx, 1)} disabled={idx === draft.buttons.length - 1} className="p-1 text-slate-400 hover:text-white disabled:opacity-30"><ChevronDown size={13} /></button>
-                          </div>
-                          <input type="text" value={btn.label} placeholder="按鈕名稱" onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).label = e.target.value; setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm font-bold" />
-                          <input type="text" value={btn.desc} placeholder="按鈕說明" onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).desc = e.target.value; setDraft({ ...draft, buttons: btns }); }} className="w-full bg-slate-900 text-white/60 px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-                <div className="border-t border-slate-700/60 pt-2">
-                  <ChangePasswordSection accentColor={config.accentColor} />
-                </div>
+              {draft.bgType === 'color'
+                ? <div className="flex items-center gap-3"><input type="color" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="h-10 w-12 cursor-pointer rounded border-0 bg-transparent" /><input type="text" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-white focus:border-yellow-400 focus:outline-none" /></div>
+                : <input type="text" placeholder="https://..." value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-yellow-400 focus:outline-none" />}
+            </section>
+            <section>
+              <label className="mb-2 block font-bold text-slate-300">強調色</label>
+              <div className="mb-2 flex items-center gap-3">
+                <input type="color" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="h-10 w-12 cursor-pointer rounded border-0 bg-transparent" />
+                <input type="text" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-sm text-white focus:border-yellow-400 focus:outline-none" />
               </div>
-              <div className="p-4 border-t border-slate-700 flex gap-3">
-                <button onClick={resetAll} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold border border-slate-600 hover:border-red-400 hover:text-red-400 transition text-sm">全部重置</button>
-                <button onClick={saveSettings} className="flex-1 py-2.5 rounded-xl font-black text-slate-900 transition hover:opacity-90 text-sm" style={{ backgroundColor: config.accentColor }}>儲存</button>
+              <div className="flex flex-wrap gap-2">
+                {['#facc15','#22d3ee','#34d399','#f472b6','#a78bfa','#fb923c','#ffffff'].map(c => (
+                  <button key={c} onClick={() => setDraft({ ...draft, accentColor: c })} className="h-7 w-7 rounded-full border-2 border-slate-600 transition hover:scale-110" style={{ backgroundColor: c }} />
+                ))}
               </div>
+            </section>
+            <div className="border-t border-slate-700/60 pt-2">
+              <ChangePasswordSection accentColor={safeConfig.accentColor} />
             </div>
           </div>
-        )}
+          <div className="flex gap-3 border-t border-slate-700 p-5">
+            <button onClick={resetAll} className="flex-1 rounded-xl border border-slate-600 bg-slate-800 py-2.5 text-sm font-bold text-slate-300 transition hover:border-red-400 hover:text-red-400">全部重置</button>
+            <button onClick={saveSettings} className="flex-1 rounded-xl py-2.5 text-sm font-black text-slate-900 transition hover:opacity-90" style={{ backgroundColor: safeConfig.accentColor }}>儲存</button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // ════════════════════════════════
-  // 桌機版佈局（自由拖曳）
-  // ════════════════════════════════
+  function renderToolsDrawer() {
+    if (!toolsOpen) return null;
+    return (
+      <div className="fixed inset-0 z-40 flex justify-end">
+        <div className="flex-1 bg-black/55 backdrop-blur-sm" onClick={() => setToolsOpen(false)} />
+        <aside className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-slate-950/95 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-black text-white">管理工具</h2>
+              <p className="mt-1 text-xs text-white/40">控制台與版面微調</p>
+            </div>
+            <button onClick={() => setToolsOpen(false)} className="rounded-lg p-2 text-white/55 transition hover:bg-white/10 hover:text-white"><X size={20} /></button>
+          </div>
+          <div className="flex-1 space-y-3 overflow-y-auto p-5">
+            {managementEntries.map(entry => renderEntryCard(entry, true))}
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
+  function renderPasswordGate() {
+    if (!gateTarget) return null;
+    return (
+      <PasswordGate
+        target={gateTarget}
+        onSuccess={handleGateSuccess}
+        onCancel={() => setGateTarget(null)}
+      />
+    );
+  }
+
+  if (editMode) {
+    return (
+      <div
+        ref={containerRef}
+        className="relative h-screen w-screen overflow-hidden font-sans select-none"
+        style={bgStyle}
+        translate="no"
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onTouchMove={onMouseMove}
+        onTouchEnd={onMouseUp}
+      >
+        {safeConfig.bgType === 'image' && <div className="absolute inset-0 bg-black/50 pointer-events-none" />}
+
+        <div
+          style={draggableStyle('title')}
+          onMouseDown={e => onDragStart(e, 'title')}
+          onTouchStart={e => onDragStart(e, 'title')}
+          className={editRing}
+        >
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-yellow-400">標題</div>
+          <h1 className="whitespace-nowrap text-4xl font-black italic drop-shadow-lg md:text-6xl" style={{ color: safeConfig.accentColor }}>
+            {safeConfig.title}
+          </h1>
+        </div>
+
+        <div
+          style={draggableStyle('subtitle')}
+          onMouseDown={e => onDragStart(e, 'subtitle')}
+          onTouchStart={e => onDragStart(e, 'subtitle')}
+          className={editRing}
+        >
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-yellow-400">副標題</div>
+          <p className="whitespace-nowrap text-lg text-white/60">{safeConfig.subtitle}</p>
+        </div>
+
+        {entries.map(entry => {
+          const Icon = getButtonIcon(entry.id);
+          return (
+            <div
+              key={entry.id}
+              style={draggableStyle(entry.id)}
+              onMouseDown={e => onDragStart(e, entry.id)}
+              onTouchStart={e => onDragStart(e, entry.id)}
+              className={editRing}
+            >
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-yellow-400">{entry.label}</div>
+              <button className="pointer-events-none relative flex min-w-[150px] flex-col items-center rounded-lg border border-white/10 bg-white/[0.055] p-5 text-center shadow-xl backdrop-blur">
+                <Icon className="mb-3 h-10 w-10" style={{ color: entry.color }} />
+                {isProtectedView(entry.id) && <Lock size={13} className="absolute right-2 top-2 text-yellow-400 opacity-70" />}
+                <h2 className="text-base font-black text-white">{entry.label}</h2>
+                <p className="mt-1 max-w-[150px] text-xs text-white/50">{entry.desc}</p>
+              </button>
+            </div>
+          );
+        })}
+
+        <div className="absolute right-4 top-4 z-50 flex gap-2">
+          <button
+            onClick={() => setEditMode(false)}
+            className="rounded-xl border border-yellow-300 bg-yellow-400 px-4 py-2 text-sm font-black text-slate-900 shadow-[0_0_15px_rgba(250,204,21,0.5)] transition hover:opacity-90"
+          >
+            完成移動
+          </button>
+          <button
+            onClick={openSettings}
+            className="relative rounded-xl border border-white/20 bg-white/10 p-2.5 transition hover:bg-white/20"
+            title="外觀設定（需要密碼）"
+          >
+            <Palette size={18} className="text-white" />
+            <Lock size={9} className="absolute right-1 top-1 text-yellow-400" />
+          </button>
+        </div>
+
+        <div className="pointer-events-none absolute bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-yellow-400/90 px-5 py-2 text-sm font-black text-slate-900 shadow-lg">
+          拖曳元素到任意位置
+        </div>
+
+        {renderSettingsPanel()}
+        {renderPasswordGate()}
+      </div>
+    );
+  }
+
   return (
     <div
-      ref={containerRef}
-      className="w-screen h-screen overflow-hidden relative font-sans select-none"
+      className="relative min-h-screen w-screen overflow-y-auto font-sans select-none"
       style={bgStyle}
       translate="no"
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onTouchMove={onMouseMove}
-      onTouchEnd={onMouseUp}
     >
-      {/* 背景遮罩 */}
-      {config.bgType === 'image' && <div className="absolute inset-0 bg-black/50 pointer-events-none" />}
+      {safeConfig.bgType === 'image' && <div className="absolute inset-0 bg-black/55 pointer-events-none" />}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-slate-950/40 to-black/70 pointer-events-none" />
 
-      {/* ── 標題 ── */}
-      <div
-        style={draggableStyle('title')}
-        onMouseDown={e => onDragStart(e, 'title')}
-        onTouchStart={e => onDragStart(e, 'title')}
-        className={editRing}
-      >
-        {editMode && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-400 text-[10px] font-bold whitespace-nowrap">✥ 標題</div>}
-        <h1
-          className="text-4xl md:text-6xl font-black italic tracking-tighter drop-shadow-lg whitespace-nowrap"
-          style={{ color: config.accentColor }}
-        >
-          {config.title}
-        </h1>
-      </div>
-
-      {/* ── 副標題 ── */}
-      <div
-        style={draggableStyle('subtitle')}
-        onMouseDown={e => onDragStart(e, 'subtitle')}
-        onTouchStart={e => onDragStart(e, 'subtitle')}
-        className={editRing}
-      >
-        {editMode && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-400 text-[10px] font-bold whitespace-nowrap">✥ 副標題</div>}
-        <p className="text-white/60 text-lg whitespace-nowrap">{config.subtitle}</p>
-      </div>
-
-      {/* ── 三個按鈕（各自可拖曳） ── */}
-      {sortedButtons.map(btn => {
-        const Icon = getButtonIcon(btn.id);
-        return (
-          <div
-            key={btn.id}
-            style={draggableStyle(btn.id)}
-            onMouseDown={e => onDragStart(e, btn.id)}
-            onTouchStart={e => onDragStart(e, btn.id)}
-            className={editRing}
-          >
-            {editMode && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-400 text-[10px] font-bold whitespace-nowrap">✥ {btn.label}</div>}
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-8 lg:px-10">
+        <header className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
+              <Trophy size={20} style={{ color: safeConfig.accentColor }} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-white/35">KURAGE CUP</p>
+              <p className="text-sm font-bold text-white/70">賽事控制中心</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                if (editMode) return;
-                handleModeClick(btn.id);
-              }}
-              className={`flex flex-col items-center p-6 md:p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-xl transition-all group
-                ${editMode ? 'pointer-events-none' : 'hover:bg-white/10'}`}
-              style={{ minWidth: 160 }}
-              onMouseEnter={e => { if (!editMode) e.currentTarget.style.borderColor = config.accentColor; }}
-              onMouseLeave={e => { if (!editMode) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+              onClick={() => setToolsOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2 text-sm font-black text-white transition hover:bg-white/[0.12]"
             >
-              <Icon className="w-12 h-12 mb-3 transition-transform group-hover:scale-110" style={{ color: config.accentColor }} />
-              {isProtectedView(btn.id) && (
-                <Lock size={13} className="absolute top-2 right-2 text-yellow-400 opacity-70" />
-              )}
-              <h2 className="text-lg font-black mb-1 text-white">{btn.label}</h2>
-              <p className="text-white/50 text-xs text-center">{btn.desc}</p>
+              <Settings size={16} />
+              <span className="hidden sm:inline">管理工具</span>
+            </button>
+            <button
+              onClick={openSettings}
+              className="relative rounded-lg border border-white/15 bg-white/[0.07] p-2.5 transition hover:bg-white/[0.12]"
+              title="外觀設定（需要密碼）"
+            >
+              <Palette size={18} className="text-white" />
+              <Lock size={8} className="absolute right-1 top-1 text-yellow-400" />
             </button>
           </div>
-        );
-      })}
+        </header>
 
-      {/* ── 右上角工具列 ── */}
-      <div className="absolute top-4 right-4 z-50 flex gap-2">
-        {/* 編輯模式切換 */}
-        <button
-          onClick={() => {
-            if (editMode) { setEditMode(false); }
-            else { setGateTarget('editmode'); }
-          }}
-          className={`px-4 py-2 rounded-xl font-black text-sm border transition-all shadow-lg relative ${
-            editMode
-              ? 'bg-yellow-400 text-slate-900 border-yellow-300 shadow-[0_0_15px_rgba(250,204,21,0.5)]'
-              : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
-          }`}
-          title={editMode ? '完成拖曳' : '自由移動模式（需要密碼）'}
-        >
-          {!editMode && <Lock size={9} className="absolute top-1 right-1 text-yellow-400" />}
-          {editMode ? '✓ 完成移動' : '✥ 自由移動'}
-        </button>
+        <main className="flex flex-1 flex-col justify-center py-10 sm:py-14">
+          <section className="mb-8 max-w-3xl">
+            <h1 className="text-4xl font-black italic leading-none text-white drop-shadow-lg sm:text-6xl" style={{ color: safeConfig.accentColor }}>
+              {safeConfig.title}
+            </h1>
+            <p className="mt-3 max-w-2xl text-base font-medium text-white/58 sm:text-lg">{safeConfig.subtitle}</p>
+          </section>
 
-        {/* 外觀設定 */}
-        <button
-          onClick={openSettings}
-          className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 transition-all relative"
-          title="外觀設定（需要密碼）"
-        >
-          <Palette size={18} className="text-white" />
-          <Lock size={9} className="absolute top-1 right-1 text-yellow-400" />
-        </button>
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {publicEntries.map(entry => renderEntryCard(entry))}
+          </section>
+        </main>
       </div>
 
-      {/* 編輯模式提示 */}
-      {editMode && (
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 bg-yellow-400/90 text-slate-900 px-5 py-2 rounded-full font-black text-sm shadow-lg pointer-events-none">
-          拖曳元素到任意位置 ── 完成後點「✓ 完成移動」
-        </div>
-      )}
-
-      {/* ── 固定的對戰表 + 記分板按鈕（永遠顯示在左下角） ── */}
-      {!editMode && (
-        <div className="absolute bottom-5 left-5 z-40 flex gap-2 flex-wrap">
-          <button
-            onClick={() => setGateTarget('bracket_operator')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm relative"
-          >
-            <Trophy size={14} className="text-yellow-400" />
-            對戰表控制台
-            <Lock size={8} className="text-yellow-400" />
-          </button>
-          <button
-            onClick={() => onNavigate('bracket_viewer')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
-          >
-            <Trophy size={14} className="text-blue-400" />
-            對戰表展示
-          </button>
-          <button
-            onClick={() => setGateTarget('scoreboard_operator')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
-          >
-            <Star size={14} className="text-yellow-400" />
-            記分板控制台
-            <Lock size={8} className="text-yellow-400" />
-          </button>
-          <button
-            onClick={() => onNavigate('scoreboard_viewer')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
-          >
-            <Star size={14} className="text-blue-400" />
-            記分板展示
-          </button>
-          <button
-            onClick={() => onNavigate('lottery')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
-          >
-            🎰 抽獎系統
-          </button>
-          <button
-            onClick={() => setGateTarget('live_operator')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm relative"
-          >
-            📺 實況計分板控制
-            <Lock size={8} className="text-yellow-400" />
-          </button>
-          <button
-            onClick={() => onNavigate('live_viewer')}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 hover:bg-black/60 border border-white/15 text-white/70 hover:text-white text-xs font-bold transition-all backdrop-blur-sm"
-          >
-            📺 實況計分板展示
-          </button>
-        </div>
-      )}
-
-      {/* ══ 外觀設定側邊欄 ══ */}
-      {settingsOpen && draft && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)} />
-          <div className="w-full max-w-sm bg-[#0f172a] border-l border-slate-700 flex flex-col shadow-2xl overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-              <h2 className="text-lg font-black text-white flex items-center gap-2"><Palette size={18} className="text-yellow-400" /> 外觀設定</h2>
-              <button onClick={() => setSettingsOpen(false)} className="p-1 text-slate-400 hover:text-white"><X size={20} /></button>
-            </div>
-
-            <div className="flex-1 p-6 space-y-6 text-sm overflow-y-auto">
-
-              <section>
-                <label className="block font-bold text-slate-300 mb-2">🏷 主標題文字</label>
-                <input type="text" value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })}
-                  className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />
-              </section>
-
-              <section>
-                <label className="block font-bold text-slate-300 mb-2">💬 副標題文字</label>
-                <input type="text" value={draft.subtitle} onChange={e => setDraft({ ...draft, subtitle: e.target.value })}
-                  className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />
-              </section>
-
-              <section>
-                <label className="block font-bold text-slate-300 mb-2">🖼 背景</label>
-                <div className="flex gap-2 mb-3">
-                  {['color','image'].map(t => (
-                    <button key={t} onClick={() => setDraft({ ...draft, bgType: t })}
-                      className={`flex-1 py-1.5 rounded-lg border font-bold transition ${draft.bgType === t ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-800 text-slate-300 border-slate-600 hover:border-yellow-400'}`}>
-                      {t === 'color' ? '純色' : '圖片'}
-                    </button>
-                  ))}
-                </div>
-                {draft.bgType === 'color'
-                  ? <div className="flex items-center gap-3">
-                      <input type="color" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-12 h-10 rounded cursor-pointer border-0 bg-transparent" />
-                      <input type="text" value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="flex-1 bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 font-mono" />
-                    </div>
-                  : <input type="text" placeholder="https://..." value={draft.bgValue} onChange={e => setDraft({ ...draft, bgValue: e.target.value })} className="w-full bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400" />
-                }
-              </section>
-
-              <section>
-                <label className="block font-bold text-slate-300 mb-2">🎨 強調色</label>
-                <div className="flex items-center gap-3 mb-2">
-                  <input type="color" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="w-12 h-10 rounded cursor-pointer border-0 bg-transparent" />
-                  <input type="text" value={draft.accentColor} onChange={e => setDraft({ ...draft, accentColor: e.target.value })} className="flex-1 bg-slate-800 text-white px-3 py-2 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 font-mono" />
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {['#facc15','#22d3ee','#34d399','#f472b6','#a78bfa','#fb923c','#ffffff'].map(c => (
-                    <button key={c} onClick={() => setDraft({ ...draft, accentColor: c })}
-                      className="w-7 h-7 rounded-full border-2 border-slate-600 hover:scale-110 transition" style={{ backgroundColor: c }} />
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <label className="block font-bold text-slate-300 mb-3">🔲 按鈕文字設定</label>
-                <div className="space-y-3">
-                  {[...draft.buttons].sort((a,b) => a.order - b.order).map((btn, idx) => {
-                    const Icon = getButtonIcon(btn.id);
-                    return (
-                      <div key={btn.id} className="bg-slate-800 rounded-xl p-3 border border-slate-700 space-y-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Icon size={14} style={{ color: draft.accentColor }} />
-                          <span className="text-slate-400 text-xs uppercase tracking-widest font-bold">{btn.id}</span>
-                          <div className="ml-auto flex gap-1">
-                            <button onClick={() => moveButton(idx, -1)} disabled={idx === 0} className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30"><ChevronUp size={14} /></button>
-                            <button onClick={() => moveButton(idx, 1)} disabled={idx === draft.buttons.length - 1} className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30"><ChevronDown size={14} /></button>
-                          </div>
-                        </div>
-                        <input type="text" value={btn.label} placeholder="按鈕名稱"
-                          onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).label = e.target.value; setDraft({ ...draft, buttons: btns }); }}
-                          className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm font-bold" />
-                        <input type="text" value={btn.desc} placeholder="按鈕說明"
-                          onChange={e => { const btns = [...draft.buttons]; btns.find(b => b.id === btn.id).desc = e.target.value; setDraft({ ...draft, buttons: btns }); }}
-                          className="w-full bg-slate-900 text-white/60 px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-yellow-400 text-sm" />
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <p className="text-slate-400 text-xs leading-relaxed">
-                  💡 <span className="text-yellow-400 font-bold">移動元素位置</span>：關閉此面板後，點右上角「<span className="text-yellow-400 font-bold">✥ 自由移動</span>」按鈕，即可用滑鼠拖曳每個元素到任意位置。
-                </p>
-              </section>
-
-              {/* 分隔線 */}
-              <div className="border-t border-slate-700/60 pt-2">
-                <ChangePasswordSection accentColor={config.accentColor} />
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-slate-700 flex gap-3">
-              <button onClick={resetAll} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold border border-slate-600 hover:border-red-400 hover:text-red-400 transition">
-                全部重置
-              </button>
-              <button onClick={saveSettings} className="flex-1 py-2.5 rounded-xl font-black text-slate-900 transition hover:opacity-90" style={{ backgroundColor: config.accentColor }}>
-                儲存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 密碼鎖 ── */}
-      {gateTarget && (
-        <PasswordGate
-          target={gateTarget}
-          onSuccess={() => {
-            const t = gateTarget;
-            setGateTarget(null);
-            if (t === 'settings') openSettingsAfterAuth();
-            if (t === 'operator') onNavigate('operator');
-              if (t === 'bracket_operator') onNavigate('bracket_operator');
-              if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
-              if (t === 'live_operator') onNavigate('live_operator');
-            if (t === 'editmode') setEditMode(true);
-          }}
-          onCancel={() => setGateTarget(null)}
-        />
-      )}
+      {renderToolsDrawer()}
+      {renderSettingsPanel()}
+      {renderPasswordGate()}
     </div>
   );
 }
