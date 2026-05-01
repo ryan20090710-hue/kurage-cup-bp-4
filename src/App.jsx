@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 // ─── Firebase 套件 ────────────────────────────────────────────────────────────
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { getDatabase, ref, onValue, set } from 'firebase/database';
@@ -22,7 +22,11 @@ const firebaseConfig1 = {
   appId: "1:230189053495:web:d8cb779641e21927dcf1b2",
   measurementId: "G-KCR9ZFJ78M"
 };
-const app1 = initializeApp(firebaseConfig1, 'app1');
+function getFirebaseApp(config, name) {
+  return getApps().find(app => app.name === name) ?? initializeApp(config, name);
+}
+
+const app1 = getFirebaseApp(firebaseConfig1, 'app1');
 const auth = getAuth(app1);
 const firestoreDb = getFirestore(app1);
 const appId = 'kurage-cup-room-1';
@@ -39,7 +43,7 @@ const firebaseConfig2 = {
   appId: "1:242490954:web:4e833d0e6726f17a3cd0b3",
   measurementId: "G-039CTS79DH"
 };
-const app2 = initializeApp(firebaseConfig2, 'app2');
+const app2 = getFirebaseApp(firebaseConfig2, 'app2');
 const realtimeDb = getDatabase(app2);
 
 // ─── Firebase App 3：Realtime Database（對戰表） ──────────────────────────────
@@ -53,7 +57,7 @@ const firebaseConfig3 = {
   appId: "1:282180845261:web:812d1d9ca5b1f45a54f384",
   measurementId: "G-TVX5B87H8T"
 };
-const app3 = initializeApp(firebaseConfig3, 'app3');
+const app3 = getFirebaseApp(firebaseConfig3, 'app3');
 const bracketDb = getDatabase(app3);
 
 // ─── Firebase App 4：Realtime Database（記分板） ──────────────────────────────
@@ -67,7 +71,7 @@ const firebaseConfig4 = {
   appId: "1:207375554363:web:2d3cbb8ab89041f27e891e",
   measurementId: "G-YN4H8VM2W2"
 };
-const app4 = initializeApp(firebaseConfig4, 'app4');
+const app4 = getFirebaseApp(firebaseConfig4, 'app4');
 const scoreboardDb = getDatabase(app4);
 
 // ─── Firebase App 5：Realtime Database（實況計分板） ──────────────────────────
@@ -81,7 +85,7 @@ const firebaseConfig5 = {
   appId: "1:685141995057:web:b87f29318cbbdc304d2f10",
   measurementId: "G-RBY60V47FR"
 };
-const app5 = initializeApp(firebaseConfig5, 'app5');
+const app5 = getFirebaseApp(firebaseConfig5, 'app5');
 const liveScoreDb = getDatabase(app5);
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -138,23 +142,37 @@ const RARITY_BG = {
 };
 
 // ─── 雲端同步 Hook（Realtime Database）── 所有元件共用 ───────────────────────
-function useFirebaseState(key, initialValue) {
+function useFirebaseState(key, initialValue, db = realtimeDb) {
+  const initialValueRef = useRef(initialValue);
   const [state, setState] = useState(initialValue);
+
   useEffect(() => {
-    const dbRef = ref(realtimeDb, key);
-    const unsubscribe = onValue(dbRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) { setState(data); }
-      else { set(dbRef, initialValue); setState(initialValue); }
-    });
+    const dbRef = ref(db, key);
+    const unsubscribe = onValue(
+      dbRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setState(snapshot.val());
+          return;
+        }
+        set(dbRef, initialValueRef.current).catch(error => {
+          console.error('Firebase init error:', error);
+        });
+        setState(initialValueRef.current);
+      },
+      (error) => {
+        console.error('Firebase listen error:', error);
+      }
+    );
     return () => unsubscribe();
-  }, [key]);
-  // 不使用 state 閉包，避免 esbuild TDZ 錯誤
+  }, [db, key]);
+
   function setSharedState(value) {
-    try {
-      set(ref(realtimeDb, key), value);
-    } catch (error) { console.error('Firebase update error:', error); }
+    return set(ref(db, key), value).catch(error => {
+      console.error('Firebase update error:', error);
+    });
   }
+
   return [state, setSharedState];
 }
 
@@ -180,7 +198,7 @@ function PasswordGate({ target, onSuccess, onCancel }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 50);
     const isBracket    = target === 'bracket_operator';
     const isScoreboard = target === 'scoreboard_operator';
     const isLive       = target === 'live_operator';
@@ -194,7 +212,10 @@ function PasswordGate({ target, onSuccess, onCancel }) {
     const unsub = onValue(dbRef, (snap) => {
       setCurrentPw(snap.val() ?? '1234');
     });
-    return () => unsub();
+    return () => {
+      clearTimeout(focusTimer);
+      unsub();
+    };
   }, [target]);
 
   const handleSubmit = () => {
@@ -357,14 +378,27 @@ const DEFAULT_POSITIONS = {
   scoreboard_viewer:  { x: 88, y: 88 },
 };
 
+const BUTTON_ICON_MAP = {
+  multiplayer: Users,
+  operator: Settings,
+  viewer: MonitorPlay,
+  bracket_operator: Trophy,
+  bracket_viewer: Trophy,
+  scoreboard_operator: Star,
+  scoreboard_viewer: MonitorPlay,
+  live_operator: MonitorPlay,
+  live_viewer: MonitorPlay,
+  lottery: Star,
+};
+
+const PROTECTED_VIEWS = new Set(['operator', 'bracket_operator', 'scoreboard_operator', 'live_operator']);
+
 function getButtonIcon(id) {
-  if (id === 'multiplayer')        return Users;
-  if (id === 'operator')           return Settings;
-  if (id === 'bracket_operator')   return Trophy;
-  if (id === 'bracket_viewer')     return Trophy;
-  if (id === 'scoreboard_operator') return Star;
-  if (id === 'scoreboard_viewer')  return MonitorPlay;
-  return MonitorPlay;
+  return BUTTON_ICON_MAP[id] ?? MonitorPlay;
+}
+
+function isProtectedView(id) {
+  return PROTECTED_VIEWS.has(id);
 }
 
 
@@ -453,9 +487,11 @@ function HomePage({ onNavigate }) {
     setDraft({ ...draft, buttons: btns });
   }
 
-  const bgStyle = config.bgType === 'image' && config.bgValue.startsWith('http')
-    ? { backgroundImage: `url(${config.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : { backgroundColor: config.bgValue };
+  const bgStyle = useMemo(() => (
+    config.bgType === 'image' && config.bgValue.startsWith('http')
+      ? { backgroundImage: `url(${config.bgValue})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : { backgroundColor: config.bgValue }
+  ), [config.bgType, config.bgValue]);
 
   // ── 拖曳元素的共用 wrapper 樣式（桌機用） ──
   function draggableStyle(id) {
@@ -472,7 +508,12 @@ function HomePage({ onNavigate }) {
 
   const editRing = editMode ? 'ring-2 ring-dashed ring-yellow-400/70 rounded-2xl p-1' : '';
 
-  const sortedButtons = [...config.buttons].sort((a, b) => a.order - b.order);
+  const sortedButtons = useMemo(() => [...config.buttons].sort((a, b) => a.order - b.order), [config.buttons]);
+
+  function handleModeClick(id) {
+    if (isProtectedView(id)) setGateTarget(id);
+    else onNavigate(id);
+  }
 
   // ════════════════════════════════
   // 手機版佈局
@@ -512,10 +553,7 @@ function HomePage({ onNavigate }) {
               return (
                 <button
                   key={btn.id}
-                  onClick={() => {
-                    if (btn.id === 'operator') setGateTarget('operator');
-                    else onNavigate(btn.id);
-                  }}
+                  onClick={() => handleModeClick(btn.id)}
                   className="flex items-center gap-4 w-full px-5 py-4 bg-white/8 backdrop-blur-sm rounded-2xl border border-white/10 active:bg-white/15 transition-all shadow-lg relative"
                   style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
                   onTouchStart={e => e.currentTarget.style.borderColor = config.accentColor}
@@ -528,7 +566,7 @@ function HomePage({ onNavigate }) {
                     <div className="text-white font-black text-base leading-tight">{btn.label}</div>
                     <div className="text-white/40 text-xs mt-0.5 truncate">{btn.desc}</div>
                   </div>
-                  {btn.id === 'operator' && (
+                  {isProtectedView(btn.id) && (
                     <Lock size={12} className="shrink-0 text-yellow-400 opacity-60" />
                   )}
                 </button>
@@ -774,7 +812,7 @@ function HomePage({ onNavigate }) {
       </div>
 
       {/* ── 三個按鈕（各自可拖曳） ── */}
-      {config.buttons.map(btn => {
+      {sortedButtons.map(btn => {
         const Icon = getButtonIcon(btn.id);
         return (
           <div
@@ -788,10 +826,7 @@ function HomePage({ onNavigate }) {
             <button
               onClick={() => {
                 if (editMode) return;
-                if (btn.id === 'operator') setGateTarget('operator');
-                else if (btn.id === 'bracket_operator') setGateTarget('bracket_operator');
-                else if (btn.id === 'scoreboard_operator') setGateTarget('scoreboard_operator');
-                else onNavigate(btn.id);
+                handleModeClick(btn.id);
               }}
               className={`flex flex-col items-center p-6 md:p-8 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 shadow-xl transition-all group
                 ${editMode ? 'pointer-events-none' : 'hover:bg-white/10'}`}
@@ -800,7 +835,7 @@ function HomePage({ onNavigate }) {
               onMouseLeave={e => { if (!editMode) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
             >
               <Icon className="w-12 h-12 mb-3 transition-transform group-hover:scale-110" style={{ color: config.accentColor }} />
-              {(btn.id === 'operator' || btn.id === 'bracket_operator' || btn.id === 'scoreboard_operator') && (
+              {isProtectedView(btn.id) && (
                 <Lock size={13} className="absolute top-2 right-2 text-yellow-400 opacity-70" />
               )}
               <h2 className="text-lg font-black mb-1 text-white">{btn.label}</h2>
@@ -3316,6 +3351,13 @@ function LotteryApp({ onBack }) {
   const rafRef      = useRef(null);
   const stateRef    = useRef({});
 
+  useEffect(() => () => {
+    clearInterval(itvRef.current);
+    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
+    cancelAnimationFrame(rafRef.current);
+  }, []);
+
   function parseNames(text) {
     return [...new Set(text.split(/[\n,、，]+/).map(s => s.trim()).filter(Boolean))];
   }
@@ -3326,8 +3368,12 @@ function LotteryApp({ onBack }) {
   }
   function stopAll() {
     clearInterval(itvRef.current);
+    clearInterval(timerRef.current);
     clearTimeout(timerRef.current);
     cancelAnimationFrame(rafRef.current);
+    itvRef.current = null;
+    timerRef.current = null;
+    rafRef.current = null;
   }
   function doReset() {
     stopAll();
@@ -5108,34 +5154,33 @@ function LiveScoreViewer({ onBack }) {
   );
 }
 
+const VIEW_COMPONENTS = {
+  multiplayer: MultiplayerBPRoom,
+  operator: OperatorPanel,
+  viewer: ViewerView,
+  bracket_operator: BracketOperator,
+  bracket_viewer: BracketViewer,
+  scoreboard_operator: ScoreboardOperator,
+  scoreboard_viewer: ScoreboardViewer,
+  lottery: LotteryApp,
+  live_operator: LiveScoreOperator,
+  live_viewer: LiveScoreViewer,
+};
+
+function getInitialView() {
+  if (typeof window === 'undefined') return 'home';
+  const view = new URLSearchParams(window.location.search).get('view');
+  return view && VIEW_COMPONENTS[view] ? view : 'home';
+}
+
 export default function App() {
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(getInitialView);
+  const ViewComponent = view === 'home' ? HomePage : (VIEW_COMPONENTS[view] ?? HomePage);
 
-  // 支援 URL 參數直接跳入特定模式（?view=viewer / ?view=operator / ?view=multiplayer）
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const v = urlParams.get('view');
-    if (v === 'viewer')           setView('viewer');
-    else if (v === 'operator')    setView('operator');
-    else if (v === 'multiplayer') setView('multiplayer');
-    else if (v === 'bracket_operator')    setView('bracket_operator');
-    else if (v === 'bracket_viewer')       setView('bracket_viewer');
-    else if (v === 'scoreboard_operator')  setView('scoreboard_operator');
-    else if (v === 'scoreboard_viewer')    setView('scoreboard_viewer');
-    else if (v === 'lottery')              setView('lottery');
-    else if (v === 'live_operator')        setView('live_operator');
-    else if (v === 'live_viewer')          setView('live_viewer');
-  }, []);
-
-  if (view === 'multiplayer')       return <MultiplayerBPRoom      onBack={() => setView('home')} />;
-  if (view === 'operator')          return <OperatorPanel           onBack={() => setView('home')} />;
-  if (view === 'viewer')            return <ViewerView              onBack={() => setView('home')} />;
-  if (view === 'bracket_operator')  return <BracketOperator         onBack={() => setView('home')} />;
-  if (view === 'bracket_viewer')    return <BracketViewer           onBack={() => setView('home')} />;
-  if (view === 'scoreboard_operator') return <ScoreboardOperator   onBack={() => setView('home')} />;
-  if (view === 'scoreboard_viewer')   return <ScoreboardViewer     onBack={() => setView('home')} />;
-  if (view === 'lottery')             return <LotteryApp           onBack={() => setView('home')} />;
-  if (view === 'live_operator')       return <LiveScoreOperator    onBack={() => setView('home')} />;
-  if (view === 'live_viewer')         return <LiveScoreViewer      onBack={() => setView('home')} />;
-  return <HomePage onNavigate={setView} />;
+  return (
+    <ViewComponent
+      onBack={() => setView('home')}
+      onNavigate={setView}
+    />
+  );
 }
