@@ -262,6 +262,7 @@ const GATE_LABELS = {
   bracket_operator:   { icon: '🏆', name: '對戰表控制台' },
   scoreboard_operator:{ icon: '🏅', name: '記分板控制台' },
   live_operator:      { icon: '📺', name: '實況計分板控制台' },
+  match_stats_operator: { icon: '📊', name: '選手數據控制台' },
 };
 
 function PasswordGate({ target, onSuccess, onCancel, themeTokens = THEME_TOKENS.dark }) {
@@ -276,7 +277,7 @@ function PasswordGate({ target, onSuccess, onCancel, themeTokens = THEME_TOKENS.
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 50);
     const isBracket    = target === 'bracket_operator';
     const isScoreboard = target === 'scoreboard_operator';
-    const isLive       = target === 'live_operator';
+    const isLive       = target === 'live_operator' || target === 'match_stats_operator';
     const dbRef = isBracket
       ? ref(bracketDb, 'bracket_password')
       : isScoreboard
@@ -448,6 +449,8 @@ const LOBBY_DEFAULT = {
     { id: 'lottery',           label: '抽獎系統',       desc: '閃光 / 賽跑 / 賽馬 / 彈珠台', order: 7 },
     { id: 'live_operator',     label: '實況計分板控制', desc: '即時對局計分',           order: 8 },
     { id: 'live_viewer',       label: '實況計分板展示', desc: '疊加在遊戲畫面上方',     order: 9 },
+    { id: 'match_stats_operator', label: '選手數據控制台', desc: '擊殺數與 DPS 數據管理', order: 10 },
+    { id: 'match_stats_viewer',   label: '選手數據展示',   desc: 'OBS 用對局成績畫面',   order: 11 },
   ],
 };
 
@@ -458,12 +461,14 @@ const DEFAULT_POSITIONS = {
   viewer:             { x: 34, y: 55 },
   bracket_viewer:     { x: 50, y: 55 },
   scoreboard_viewer:  { x: 66, y: 55 },
-  live_viewer:        { x: 82, y: 55 },
+  live_viewer:        { x: 74, y: 55 },
+  match_stats_viewer: { x: 90, y: 55 },
   lottery:            { x: 50, y: 78 },
-  operator:           { x: 26, y: 78 },
-  bracket_operator:   { x: 38, y: 78 },
-  scoreboard_operator:{ x: 62, y: 78 },
-  live_operator:      { x: 74, y: 78 },
+  operator:           { x: 18, y: 78 },
+  bracket_operator:   { x: 30, y: 78 },
+  scoreboard_operator:{ x: 50, y: 78 },
+  live_operator:      { x: 62, y: 78 },
+  match_stats_operator: { x: 82, y: 78 },
 };
 
 const BUTTON_ICON_MAP = {
@@ -476,10 +481,12 @@ const BUTTON_ICON_MAP = {
   scoreboard_viewer: MonitorPlay,
   live_operator: MonitorPlay,
   live_viewer: MonitorPlay,
+  match_stats_operator: MonitorPlay,
+  match_stats_viewer: MonitorPlay,
   lottery: Star,
 };
 
-const PROTECTED_VIEWS = new Set(['operator', 'bracket_operator', 'scoreboard_operator', 'live_operator']);
+const PROTECTED_VIEWS = new Set(['operator', 'bracket_operator', 'scoreboard_operator', 'live_operator', 'match_stats_operator']);
 
 const LOBBY_ENTRY_META = [
   { id: 'multiplayer', label: '多人連線 BP', desc: '雙方即時禁用與選角', kind: 'public', kicker: 'BP ROOM', color: '#38bdf8' },
@@ -487,11 +494,13 @@ const LOBBY_ENTRY_META = [
   { id: 'bracket_viewer', label: '對戰表展示', desc: 'OBS 用 8 強對戰表', kind: 'public', kicker: 'BRACKET', color: '#facc15' },
   { id: 'scoreboard_viewer', label: '記分板展示', desc: 'OBS / 轉播用比分畫面', kind: 'public', kicker: 'SCOREBOARD', color: '#a78bfa' },
   { id: 'live_viewer', label: '實況計分板展示', desc: '疊加在遊戲畫面上方', kind: 'public', kicker: 'LIVE OVERLAY', color: '#34d399' },
+  { id: 'match_stats_viewer', label: '選手數據展示', desc: 'OBS 用對局成績畫面', kind: 'public', kicker: 'MATCH STATS', color: '#fb923c' },
   { id: 'lottery', label: '抽獎系統', desc: '閃光 / 賽跑 / 賽馬 / 彈珠台', kind: 'public', kicker: 'DRAW', color: '#f472b6' },
   { id: 'operator', label: '操作者控制台', desc: '手動管理賽事 BP 顯示', kind: 'protected', kicker: 'BP CONTROL', color: '#f59e0b' },
   { id: 'bracket_operator', label: '對戰表控制台', desc: '管理 8 強賽事對戰表', kind: 'protected', kicker: 'BRACKET CONTROL', color: '#facc15' },
   { id: 'scoreboard_operator', label: '記分板控制台', desc: '管理兩隊即時比分', kind: 'protected', kicker: 'SCORE CONTROL', color: '#a78bfa' },
   { id: 'live_operator', label: '實況計分板控制', desc: '即時對局計分', kind: 'protected', kicker: 'LIVE CONTROL', color: '#34d399' },
+  { id: 'match_stats_operator', label: '選手數據控制台', desc: '擊殺數與 DPS 數據管理', kind: 'protected', kicker: 'STATS CONTROL', color: '#fb923c' },
 ];
 
 const EDIT_MODE_ENTRY = {
@@ -657,6 +666,7 @@ function HomePage({ onNavigate, theme = 'dark', themeTokens = THEME_TOKENS.dark,
     if (t === 'bracket_operator') onNavigate('bracket_operator');
     if (t === 'scoreboard_operator') onNavigate('scoreboard_operator');
     if (t === 'live_operator') onNavigate('live_operator');
+    if (t === 'match_stats_operator') onNavigate('match_stats_operator');
     if (t === 'editmode') setEditMode(true);
   }
 
@@ -2136,64 +2146,244 @@ function OperatorPanel({ onBack }) {
   );
 }
 
-function ViewerBanSlot({ ban, color }) {
+function ViewerBanSlot({ ban, size }) {
+  const s = size || 75;
   return (
-    <div className="w-[75px] h-[75px] rounded-lg border-[3px] relative overflow-hidden shadow-xl bg-[#2a3040]" style={{ borderColor: color }}>
+    <div style={{ width: s, height: s, position: 'relative', overflow: 'hidden' }}>
       {ban.brawler ? (
         <>
-          <img src={ban.brawler.imageUrl} alt={ban.brawler.name} className="w-full h-full object-cover filter grayscale opacity-90" />
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-20 drop-shadow-md" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="5" y1="5" x2="95" y2="95" stroke="#d5281a" strokeWidth="10" strokeLinecap="round" /></svg>
+          <img src={ban.brawler.imageUrl} alt={ban.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(1)', opacity: 0.9, display: 'block' }} />
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }} viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="5" y1="5" x2="95" y2="95" stroke="#d5281a" strokeWidth="10" strokeLinecap="round" /></svg>
         </>
-      ) : (<div className="w-full h-full bg-[#1e2330] flex items-center justify-center opacity-50"></div>)}
+      ) : null}
     </div>
   );
 }
 
-function ViewerPickSlot({ pick, color }) {
+function ViewerPickSlot({ pick, size }) {
+  const s = size || 120;
   return (
-    <div className="flex flex-col items-center relative w-full">
-      <span className="absolute -top-8 text-white text-xl font-bold tracking-wide drop-shadow-lg z-10" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{pick.player}</span>
-      <div className="w-[120px] h-[120px] rounded-2xl border-[4px] relative overflow-hidden shadow-2xl bg-[#2a3040]" style={{ borderColor: color }}>
-        {pick.brawler
-          ? <img src={pick.brawler.imageUrl} alt={pick.brawler.name} className="w-full h-full object-cover" />
-          : <div className="w-full h-full bg-[#1e2330] flex items-center justify-center opacity-50"></div>}
-      </div>
+    <div style={{ width: s, height: s, position: 'relative', overflow: 'hidden' }}>
+      {pick.brawler ? (
+        <img src={pick.brawler.imageUrl} alt={pick.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : null}
     </div>
   );
 }
+
+const DEFAULT_BP_LAYOUT = {
+  title:    { x: 50, y:  4, w: 600, visible: true, anchor: 'center' },
+  bans_lbl: { x: 50, y: 16, w: 180, visible: true, anchor: 'center' },
+  t1_b0: { x: 22, y: 14, w: 75, visible: true },
+  t1_b1: { x: 28, y: 14, w: 75, visible: true },
+  t1_b2: { x: 34, y: 14, w: 75, visible: true },
+  t2_b0: { x: 58, y: 14, w: 75, visible: true },
+  t2_b1: { x: 64, y: 14, w: 75, visible: true },
+  t2_b2: { x: 70, y: 14, w: 75, visible: true },
+  t1_name: { x: 12, y: 30, w: 260, visible: true },
+  t2_name: { x: 72, y: 30, w: 260, visible: true },
+  t1_pn0: { x: 18, y: 40, w: 140, visible: true },
+  t1_pn1: { x: 18, y: 60, w: 140, visible: true },
+  t1_pn2: { x: 18, y: 80, w: 140, visible: true },
+  t2_pn0: { x: 74, y: 40, w: 140, visible: true },
+  t2_pn1: { x: 74, y: 60, w: 140, visible: true },
+  t2_pn2: { x: 74, y: 80, w: 140, visible: true },
+  t1_p0: { x: 18, y: 44, w: 120, visible: true },
+  t1_p1: { x: 18, y: 64, w: 120, visible: true },
+  t1_p2: { x: 18, y: 84, w: 120, visible: true },
+  t2_p0: { x: 74, y: 44, w: 120, visible: true },
+  t2_p1: { x: 74, y: 64, w: 120, visible: true },
+  t2_p2: { x: 74, y: 84, w: 120, visible: true },
+};
 
 function ViewerView({ onBack }) {
   const [state] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
+  const [layout, setLayout] = useState(DEFAULT_BP_LAYOUT);
+  const [editMode, setEditMode] = useState(false);
+  const draggingRef = useRef(null);
+  const resizingRef = useRef(null);
+  const dragOffRef  = useRef({ x: 0, y: 0 });
+  const resizeStartRef = useRef({ mx: 0, w: 0 });
+  const layoutRef = useRef(layout);
+  const containerRef = useRef(null);
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+
+  useEffect(() => {
+    const dbRef = ref(bracketDb, 'bp_viewer_layout');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) setLayout({ ...DEFAULT_BP_LAYOUT, ...data });
+    });
+    return () => unsub();
+  }, []);
+
+  function saveLayout(l) { set(ref(bracketDb, 'bp_viewer_layout'), l).catch(() => {}); }
+
   const bgStyle = state.background.startsWith('http')
     ? { backgroundImage: `url(${state.background})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : { backgroundColor: state.background };
-  return (
-    <div className="w-screen h-screen overflow-hidden flex flex-col relative font-sans select-none" style={bgStyle} translate="no">
 
-      {/* 返回按鈕：完全透明，滑鼠移到左上角才顯示，不影響 OBS 擷取 */}
-      <button onClick={onBack} className="kurage-floating-control absolute top-4 left-4 z-50 bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-bold opacity-0 hover:opacity-100 transition-opacity duration-300 select-none">
-        ← 首頁
-      </button>      <div className="w-full text-center pt-8 pb-4 z-10">
-        <h1 className="text-3xl md:text-5xl font-extrabold tracking-[0.2em] text-white drop-shadow-md" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.4)' }}>{state.matchTitle}</h1>
+  function startDrag(e, key) {
+    if (!editMode) return;
+    e.preventDefault(); e.stopPropagation();
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const el = layoutRef.current[key];
+    const elLeft = el.anchor === 'center'
+      ? (el.x / 100) * rect.width - el.w / 2
+      : (el.x / 100) * rect.width;
+    dragOffRef.current = { x: cx - rect.left - elLeft, y: cy - rect.top - (el.y / 100) * rect.height };
+    draggingRef.current = key;
+  }
+  function startResize(e, key) {
+    e.preventDefault(); e.stopPropagation();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    resizeStartRef.current = { mx: cx, w: layoutRef.current[key].w };
+    resizingRef.current = key;
+  }
+  function onMove(e) {
+    const rect = containerRef.current?.getBoundingClientRect(); if (!rect) return;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    if (draggingRef.current) {
+      const key = draggingRef.current;
+      const el = layoutRef.current[key];
+      const x = el.anchor === 'center'
+        ? Math.min(99, Math.max(1, ((cx - dragOffRef.current.x - rect.left + el.w/2) / rect.width) * 100))
+        : Math.min(98, Math.max(0, ((cx - dragOffRef.current.x - rect.left) / rect.width) * 100));
+      const y = Math.min(97, Math.max(0, ((cy - dragOffRef.current.y - rect.top) / rect.height) * 100));
+      setLayout(l => ({ ...l, [key]: { ...l[key], x, y } }));
+    }
+    if (resizingRef.current) {
+      const key = resizingRef.current;
+      const dx = cx - resizeStartRef.current.mx;
+      const newW = Math.max(40, resizeStartRef.current.w + dx);
+      setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
+    }
+  }
+  function onUp() {
+    if (draggingRef.current || resizingRef.current) saveLayout(layoutRef.current);
+    draggingRef.current = null; resizingRef.current = null;
+  }
+  function hideEl(key) {
+    const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
+    setLayout(l); saveLayout(l);
+  }
+  function resetLayout() { setLayout(DEFAULT_BP_LAYOUT); saveLayout(DEFAULT_BP_LAYOUT); }
+
+  function Draggable({ id, children }) {
+    const el = layout[id]; if (!el?.visible) return null;
+    const left = el.anchor === 'center' ? `calc(${el.x}% - ${el.w/2}px)` : `${el.x}%`;
+    return (
+      <div onMouseDown={e => startDrag(e, id)} onTouchStart={e => startDrag(e, id)}
+        style={{
+          position: 'absolute', left, top: `${el.y}%`, width: el.w,
+          cursor: editMode ? 'grab' : 'default',
+          userSelect: 'none', zIndex: 10,
+          outline: editMode ? '1.5px dashed rgba(250,204,21,0.55)' : 'none',
+          borderRadius: 10,
+        }}>
+        {children}
+        {editMode && (<>
+          <button onMouseDown={e => { e.stopPropagation(); hideEl(id); }}
+            style={{
+              position: 'absolute', top: -9, right: -9, zIndex: 200,
+              width: 20, height: 20, borderRadius: '50%',
+              background: '#ef4444', border: '2px solid #fff',
+              color: '#fff', fontWeight: 900, fontSize: 11,
+              cursor: 'pointer', lineHeight: 1, padding: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>✕</button>
+          <div onMouseDown={e => startResize(e, id)} onTouchStart={e => startResize(e, id)}
+            style={{
+              position: 'absolute', bottom: -6, right: -6, zIndex: 200,
+              width: 14, height: 14, borderRadius: 4,
+              background: '#facc15', border: '2px solid #fff', cursor: 'se-resize',
+            }} />
+        </>)}
       </div>
-      <div className="w-full flex justify-center items-center gap-16 mb-6 z-10">
-        <div className="flex gap-4">{state.team1.bans.map(ban => <ViewerBanSlot key={ban.id} ban={ban} color={state.team1.color} />)}</div>
-        <div className="font-black text-2xl tracking-widest text-white/50 drop-shadow-md">BANS</div>
-        <div className="flex gap-4">{state.team2.bans.map(ban => <ViewerBanSlot key={ban.id} ban={ban} color={state.team2.color} />)}</div>
+    );
+  }
+
+  const titleFs = Math.max(20, Math.min(60, (layout.title?.w || 600) / 10));
+  const bansLblFs = Math.max(14, Math.min(36, (layout.bans_lbl?.w || 180) / 6));
+
+  return (
+    <div ref={containerRef}
+      style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', fontFamily: 'sans-serif', ...bgStyle }}
+      onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
+
+      <button onClick={onBack} className="kurage-floating-control" style={{
+        position: 'absolute', top: 10, left: 10, zIndex: 300,
+        background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none',
+        padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700,
+        cursor: 'pointer', opacity: 0, transition: 'opacity 0.3s',
+      }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0}>← 首頁</button>
+
+      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 300, display: 'flex', gap: 8 }}>
+        {editMode && <button onClick={resetLayout} style={{ background: 'rgba(239,68,68,0.85)', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>重置位置</button>}
+        <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{
+          background: editMode ? '#facc15' : 'rgba(0,0,0,0.45)',
+          color: editMode ? '#1e293b' : '#fff',
+          border: editMode ? 'none' : '1px solid rgba(255,255,255,0.2)',
+          padding: '4px 14px', borderRadius: 7, fontSize: 12, fontWeight: 900, cursor: 'pointer',
+          opacity: editMode ? 1 : 0, transition: 'opacity 0.3s',
+        }} onMouseEnter={e => { if (!editMode) e.target.style.opacity = 1; }}
+           onMouseLeave={e => { if (!editMode) e.target.style.opacity = 0; }}>
+          {editMode ? '✓ 完成' : '✥ 編輯'}
+        </button>
       </div>
-      <div className="flex-1 flex justify-center items-start pt-4 z-10">
-        <div className="w-full max-w-5xl flex justify-around">
-          <div className="flex flex-col items-center w-64">
-            <h2 className="text-3xl font-black mb-8 tracking-wider text-center break-words w-full px-4" style={{ color: state.team1.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)' }}>{state.team1.name}</h2>
-            <div className="flex flex-col gap-10 w-full items-center">{state.team1.picks.map(pick => <ViewerPickSlot key={pick.id} pick={pick} color={state.team1.color} />)}</div>
-          </div>
-          <div className="w-32"></div>
-          <div className="flex flex-col items-center w-64">
-            <h2 className="text-3xl font-black mb-8 tracking-wider text-center break-words w-full px-4" style={{ color: state.team2.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)' }}>{state.team2.name}</h2>
-            <div className="flex flex-col gap-10 w-full items-center">{state.team2.picks.map(pick => <ViewerPickSlot key={pick.id} pick={pick} color={state.team2.color} />)}</div>
-          </div>
-        </div>
-      </div>
+
+      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+
+      <Draggable id="title">
+        <h1 style={{ fontSize: titleFs, fontWeight: 800, textAlign: 'center', letterSpacing: '0.2em', color: '#fff', textShadow: '2px 2px 4px rgba(0,0,0,0.4)', margin: 0, padding: 0, whiteSpace: 'nowrap' }}>{state.matchTitle}</h1>
+      </Draggable>
+
+      <Draggable id="bans_lbl">
+        <div style={{ fontSize: bansLblFs, fontWeight: 900, textAlign: 'center', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)', textShadow: '2px 2px 4px rgba(0,0,0,0.4)' }}>BANS</div>
+      </Draggable>
+
+      {state.team1.bans.map((ban, i) => (
+        <Draggable key={`t1_b${i}`} id={`t1_b${i}`}>
+          <ViewerBanSlot ban={ban} size={layout[`t1_b${i}`]?.w} />
+        </Draggable>
+      ))}
+      {state.team2.bans.map((ban, i) => (
+        <Draggable key={`t2_b${i}`} id={`t2_b${i}`}>
+          <ViewerBanSlot ban={ban} size={layout[`t2_b${i}`]?.w} />
+        </Draggable>
+      ))}
+
+      <Draggable id="t1_name">
+        <h2 style={{ fontSize: Math.max(14, Math.min(44, (layout.t1_name?.w || 260) / 8)), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: state.team1.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team1.name}</h2>
+      </Draggable>
+      <Draggable id="t2_name">
+        <h2 style={{ fontSize: Math.max(14, Math.min(44, (layout.t2_name?.w || 260) / 8)), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: state.team2.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team2.name}</h2>
+      </Draggable>
+
+      {state.team1.picks.map((pick, i) => (
+        <Draggable key={`t1_pn${i}`} id={`t1_pn${i}`}>
+          <div style={{ fontSize: Math.max(12, Math.min(28, (layout[`t1_pn${i}`]?.w || 140) / 6)), fontWeight: 700, color: '#fff', textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
+        </Draggable>
+      ))}
+      {state.team2.picks.map((pick, i) => (
+        <Draggable key={`t2_pn${i}`} id={`t2_pn${i}`}>
+          <div style={{ fontSize: Math.max(12, Math.min(28, (layout[`t2_pn${i}`]?.w || 140) / 6)), fontWeight: 700, color: '#fff', textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
+        </Draggable>
+      ))}
+
+      {state.team1.picks.map((pick, i) => (
+        <Draggable key={`t1_p${i}`} id={`t1_p${i}`}>
+          <ViewerPickSlot pick={pick} size={layout[`t1_p${i}`]?.w} />
+        </Draggable>
+      ))}
+      {state.team2.picks.map((pick, i) => (
+        <Draggable key={`t2_p${i}`} id={`t2_p${i}`}>
+          <ViewerPickSlot pick={pick} size={layout[`t2_p${i}`]?.w} />
+        </Draggable>
+      ))}
     </div>
   );
 }
@@ -4438,6 +4628,521 @@ function useLiveScore() {
   return [state, update];
 }
 
+// ── 選手對局數據 ──────────────────────────────────────────────────────────────
+const MS_PLAYER_DEFAULT = { name: '', kills: 0, deaths: 0, dps: 0, avatarId: '' };
+const MATCH_STATS_DEFAULT = {
+  visible: true,
+  bgType: 'transparent',
+  bgColor: '#0a0c14',
+  modeImage: '',
+  team1: { color: '#1e88ff', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
+  team2: { color: '#ff3838', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
+};
+
+function makeMsLayout() {
+  const l = {
+    title:        { x: 43, y:  4, w: 260, visible: true },
+    mode_image:   { x: 46, y: 12, w:  90, visible: true },
+    kills_label:  { x: 46, y: 44, w:  80, visible: true },
+    deaths_label: { x: 46, y: 53, w:  80, visible: true },
+    dps_label:    { x: 46, y: 62, w:  80, visible: true },
+  };
+  const t1xs = [10, 21, 32];
+  const t2xs = [60, 71, 82];
+  [0, 1, 2].forEach(i => {
+    l[`t1_${i}_avatar`] = { x: t1xs[i], y: 10, w: 140, visible: true };
+    l[`t1_${i}_name`]   = { x: t1xs[i], y: 35, w: 150, visible: true };
+    l[`t1_${i}_kills`]  = { x: t1xs[i], y: 44, w: 120, visible: true };
+    l[`t1_${i}_deaths`] = { x: t1xs[i], y: 53, w: 120, visible: true };
+    l[`t1_${i}_dps`]    = { x: t1xs[i], y: 62, w: 120, visible: true };
+    l[`t2_${i}_avatar`] = { x: t2xs[i], y: 10, w: 140, visible: true };
+    l[`t2_${i}_name`]   = { x: t2xs[i], y: 35, w: 150, visible: true };
+    l[`t2_${i}_kills`]  = { x: t2xs[i], y: 44, w: 120, visible: true };
+    l[`t2_${i}_deaths`] = { x: t2xs[i], y: 53, w: 120, visible: true };
+    l[`t2_${i}_dps`]    = { x: t2xs[i], y: 62, w: 120, visible: true };
+  });
+  return l;
+}
+const MS_LAYOUT_DEFAULT = makeMsLayout();
+
+function useMatchStats() {
+  const [state, setState] = useState(MATCH_STATS_DEFAULT);
+  useEffect(() => {
+    const dbRef = ref(liveScoreDb, 'match_stats');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) {
+        const norm = { ...MATCH_STATS_DEFAULT, ...data };
+        ['team1', 'team2'].forEach(t => {
+          const td = data[t] || {};
+          let players = td.players;
+          if (players && !Array.isArray(players)) players = Object.values(players);
+          norm[t] = { ...MATCH_STATS_DEFAULT[t], ...td, players: Array.from({ length: 3 }, (_, i) => ({ ...MS_PLAYER_DEFAULT, ...(players?.[i] || {}) })) };
+        });
+        setState(norm);
+      } else { set(dbRef, MATCH_STATS_DEFAULT); setState(MATCH_STATS_DEFAULT); }
+    });
+    return () => unsub();
+  }, []);
+  function update(path, value) { set(ref(liveScoreDb, `match_stats/${path}`), value); }
+  function updatePlayer(team, idx, field, value) {
+    const players = (state[team]?.players || [{}, {}, {}]).map((p, i) => i === idx ? { ...MS_PLAYER_DEFAULT, ...p, [field]: value } : { ...MS_PLAYER_DEFAULT, ...p });
+    set(ref(liveScoreDb, `match_stats/${team}/players`), players);
+  }
+  return [state, update, updatePlayer];
+}
+
+// 本地緩存數字輸入，blur / Enter 才寫入，避免清空時歸零
+// 必須定義在元件外層，才不會因父元件 re-render 而被重新掛載
+function MsNumInput({ value, onCommit, className }) {
+  const [local, setLocal] = useState(String(value ?? 0));
+  useEffect(() => { setLocal(String(value ?? 0)); }, [value]);
+  function commit(str) {
+    const n = Math.max(0, parseInt(str, 10) || 0);
+    setLocal(String(n));
+    onCommit(n);
+  }
+  return (
+    <input type="number" min="0" value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={e => commit(e.target.value)}
+      onKeyDown={e => e.key === 'Enter' && commit(e.target.value)}
+      className={className} />
+  );
+}
+
+function MsStatCtl({ label, value, onChange }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 shrink-0">
+      <span className="text-[10px] font-bold text-slate-400">{label}</span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => onChange(Math.max(0, (value ?? 0) - 1))}
+          className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 font-black text-slate-600 transition active:scale-95 text-xs">−</button>
+        <MsNumInput value={value ?? 0} onCommit={onChange}
+          className="w-12 p-1 border rounded outline-none text-sm font-bold text-center focus:border-yellow-400" />
+        <button onClick={() => onChange((value ?? 0) + 1)}
+          className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 font-black text-slate-600 transition active:scale-95 text-xs">＋</button>
+      </div>
+    </div>
+  );
+}
+
+function MsPlayerRow({ player, color, idx, onUpdate, onPickAvatar, onClearAvatar }) {
+  const p = { ...MS_PLAYER_DEFAULT, ...(player || {}) };
+  const brawler = p.avatarId ? BRAWLERS.find(b => b.id === p.avatarId) : null;
+  return (
+    <div className="flex gap-2 items-center py-2 border-b border-slate-100 last:border-0 flex-wrap">
+      <button onClick={onPickAvatar}
+        className="w-9 h-9 rounded-lg border-2 border-slate-200 hover:border-yellow-400 overflow-hidden bg-slate-50 shrink-0 transition relative">
+        {brawler
+          ? <img src={getPortrait(brawler)} alt={brawler.name} className="w-full h-full object-cover" />
+          : <span className="text-slate-300 text-lg font-bold">＋</span>}
+        {brawler && (
+          <button onMouseDown={e => { e.stopPropagation(); onClearAvatar(); }}
+            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center hover:bg-red-600 z-10">×</button>
+        )}
+      </button>
+      <input type="text" value={p.name} placeholder={`選手 ${idx + 1}`}
+        onChange={e => onUpdate('name', e.target.value)}
+        className="flex-1 p-2 border rounded-lg outline-none text-sm font-bold focus:border-yellow-400 min-w-0" style={{ minWidth: 80 }} />
+      <MsStatCtl label="擊殺" value={p.kills}  onChange={v => onUpdate('kills',  v)} />
+      <MsStatCtl label="死亡" value={p.deaths} onChange={v => onUpdate('deaths', v)} />
+      <div className="flex flex-col items-center gap-0.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-400">DPS</span>
+        <MsNumInput value={p.dps} onCommit={v => onUpdate('dps', v)}
+          className="w-20 p-1.5 border rounded-lg outline-none text-sm font-bold text-center focus:border-yellow-400" />
+      </div>
+    </div>
+  );
+}
+
+function MsTeamSection({ label, color, players, onColorChange, onUpdatePlayer, onPickAvatar, onClearAvatar }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-4 h-4 rounded-full" style={{ background: color }} />
+        <h3 className="font-black text-base" style={{ color }}>{label}</h3>
+        <div className="ml-auto flex items-center gap-2">
+          <input type="color" value={color} onChange={e => onColorChange(e.target.value)}
+            className="w-8 h-7 rounded cursor-pointer border-0 p-0.5" />
+        </div>
+      </div>
+      <div className="flex text-xs font-bold text-slate-400 mb-1 gap-2">
+        <span className="w-9 shrink-0 text-center">頭像</span>
+        <span className="flex-1">名稱</span>
+        <span className="w-20 text-center">擊殺</span>
+        <span className="w-20 text-center">死亡</span>
+        <span className="w-20 text-center">DPS</span>
+      </div>
+      {[0, 1, 2].map(i => (
+        <MsPlayerRow key={i} idx={i}
+          player={players?.[i]} color={color}
+          onUpdate={(field, v) => onUpdatePlayer(i, field, v)}
+          onPickAvatar={() => onPickAvatar(i)}
+          onClearAvatar={() => onUpdatePlayer(i, 'avatarId', '')} />
+      ))}
+    </div>
+  );
+}
+
+function MatchStatsOperator({ onBack }) {
+  const [state, update, updatePlayer] = useMatchStats();
+  const [pickerFor, setPickerFor] = useState(null);
+  const t1color = state.team1?.color || '#1e88ff';
+  const t2color = state.team2?.color || '#ff3838';
+
+  return (
+    <div className="kurage-control-bg min-h-screen bg-slate-100 font-sans flex flex-col">
+      <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm">
+            <Home size={16} /> 首頁
+          </button>
+          <h1 className="text-xl font-black flex items-center gap-2">📊 選手對局數據控制台</h1>
+        </div>
+        <button onClick={() => { set(ref(liveScoreDb, 'match_stats'), MATCH_STATS_DEFAULT); set(ref(liveScoreDb, 'match_stats_layout'), makeMsLayout()); }}
+          className="px-4 py-2 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 font-bold transition">重置</button>
+      </header>
+
+      <main className="flex-1 p-4 md:p-6 space-y-5 overflow-y-auto max-w-4xl mx-auto w-full">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center justify-between">
+          <div>
+            <div className="font-black text-sm">📺 OBS 顯示</div>
+            <div className="text-xs text-slate-400 mt-1">關閉時 Viewer 畫面會隱藏</div>
+          </div>
+          <button onClick={() => update('visible', !state.visible)}
+            className="relative w-14 h-8 rounded-full transition" style={{ background: state.visible ? '#22c55e' : '#cbd5e1' }}>
+            <div className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition" style={{ left: state.visible ? 28 : 4 }} />
+          </button>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-sm mb-3 border-b pb-2">🎨 畫面背景</h2>
+          <div className="flex gap-3 mb-3">
+            {[['color','純色'],['transparent','透明']].map(([v, label]) => (
+              <button key={v} onClick={() => update('bgType', v)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${state.bgType === v ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{label}</button>
+            ))}
+          </div>
+          {state.bgType === 'color' && (
+            <div className="flex gap-2 items-center">
+              <input type="color" value={state.bgColor?.startsWith('#') ? state.bgColor : '#0a0c14'} onChange={e => update('bgColor', e.target.value)}
+                className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+              <input type="text" value={state.bgColor || ''} onChange={e => update('bgColor', e.target.value)}
+                className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" placeholder="#0a0c14" />
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-sm mb-3 border-b pb-2">🎮 模式圖片</h2>
+          <div className="flex gap-3 items-center">
+            {state.modeImage && (
+              <img src={state.modeImage} alt="mode" className="w-12 h-12 object-contain rounded-lg bg-slate-100 shrink-0" onError={e => e.target.style.display='none'} />
+            )}
+            <input type="text" value={state.modeImage || ''} onChange={e => update('modeImage', e.target.value)}
+              placeholder="貼上圖片網址 https://..." className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" />
+            {state.modeImage && (
+              <button onClick={() => update('modeImage', '')} className="px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-500 shrink-0">清除</button>
+            )}
+          </div>
+        </div>
+
+        <TeamSection team="team1" label="🔵 左隊（藍方）" />
+        <TeamSection team="team2" label="🔴 右隊（紅方）" />
+      </main>
+
+      {pickerFor && (
+        <BrawlerPickerModal
+          onSelect={b => { updatePlayer(pickerFor.team, pickerFor.idx, 'avatarId', b.id); setPickerFor(null); }}
+          onClose={() => setPickerFor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MatchStatsViewer({ onBack }) {
+  const [state] = useMatchStats();
+  const [layout, setLayout] = useState(MS_LAYOUT_DEFAULT);
+  const [editMode, setEditMode] = useState(false);
+  const containerRef = useRef(null);
+  const layoutRef = useRef(layout);
+  const draggingRef = useRef(null);
+  const resizingRef = useRef(null);
+  const dragOffRef = useRef({ x: 0, y: 0 });
+  const resizeStartRef = useRef({ mx: 0, w: 0 });
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+
+  useEffect(() => {
+    const dbRef = ref(liveScoreDb, 'match_stats_layout');
+    const unsub = onValue(dbRef, snap => {
+      const data = snap.val();
+      if (data) setLayout({ ...MS_LAYOUT_DEFAULT, ...data });
+    });
+    return () => unsub();
+  }, []);
+
+  function saveLayout(l) { set(ref(liveScoreDb, 'match_stats_layout'), l).catch(() => {}); }
+
+  function startDrag(e, key) {
+    if (!editMode) return;
+    e.preventDefault(); e.stopPropagation();
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const el = layoutRef.current[key];
+    dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
+    draggingRef.current = key;
+  }
+  function startResize(e, key) {
+    e.preventDefault(); e.stopPropagation();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    resizeStartRef.current = { mx: cx, w: layoutRef.current[key].w };
+    resizingRef.current = key;
+  }
+  function onMove(e) {
+    const rect = containerRef.current?.getBoundingClientRect(); if (!rect) return;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    if (draggingRef.current) {
+      const key = draggingRef.current;
+      const x = Math.min(98, Math.max(0, ((cx - dragOffRef.current.x - rect.left) / rect.width) * 100));
+      const y = Math.min(97, Math.max(0, ((cy - dragOffRef.current.y - rect.top) / rect.height) * 100));
+      setLayout(l => ({ ...l, [key]: { ...l[key], x, y } }));
+    }
+    if (resizingRef.current) {
+      const key = resizingRef.current;
+      const dx = cx - resizeStartRef.current.mx;
+      const newW = Math.max(40, resizeStartRef.current.w + dx);
+      setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
+    }
+  }
+  function onUp() {
+    if (draggingRef.current || resizingRef.current) saveLayout(layoutRef.current);
+    draggingRef.current = null; resizingRef.current = null;
+  }
+  function hideEl(key) {
+    const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
+    setLayout(l); saveLayout(l);
+  }
+  function showAll() {
+    const l = { ...layoutRef.current };
+    Object.keys(l).forEach(k => { l[k] = { ...l[k], visible: true }; });
+    setLayout(l); saveLayout(l);
+  }
+  function resetLayout() { setLayout(MS_LAYOUT_DEFAULT); saveLayout(MS_LAYOUT_DEFAULT); }
+
+  function Draggable({ id, children }) {
+    const el = layout[id]; if (!el?.visible) return null;
+    return (
+      <div onMouseDown={e => startDrag(e, id)} onTouchStart={e => startDrag(e, id)}
+        style={{
+          position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: el.w,
+          cursor: editMode ? 'grab' : 'default',
+          userSelect: 'none', zIndex: 10,
+          outline: editMode ? '1.5px dashed rgba(250,204,21,0.6)' : 'none',
+          borderRadius: 6,
+        }}>
+        {children}
+        {editMode && (<>
+          <button onMouseDown={e => { e.stopPropagation(); hideEl(id); }}
+            style={{
+              position: 'absolute', top: -9, right: -9, zIndex: 200,
+              width: 20, height: 20, borderRadius: '50%',
+              background: '#ef4444', border: '2px solid #fff',
+              color: '#fff', fontWeight: 900, fontSize: 11,
+              cursor: 'pointer', lineHeight: 1, padding: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>✕</button>
+          <div onMouseDown={e => startResize(e, id)} onTouchStart={e => startResize(e, id)}
+            style={{
+              position: 'absolute', bottom: -6, right: -6, zIndex: 200,
+              width: 14, height: 14, borderRadius: 4,
+              background: '#facc15', border: '2px solid #fff', cursor: 'se-resize',
+            }} />
+        </>)}
+      </div>
+    );
+  }
+
+  const { team1, team2, visible, bgType, bgColor } = state;
+  const t1color = team1?.color || '#1e88ff';
+  const t2color = team2?.color || '#ff3838';
+  const screenBg = bgType === 'color' ? (bgColor || '#0a0c14') : 'transparent';
+
+  if (!visible) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', background: 'transparent', position: 'relative' }}>
+        <button onClick={onBack} className="kurage-floating-control" style={{
+          position: 'absolute', top: 14, left: 14, zIndex: 50,
+          background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none',
+          padding: '5px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', opacity: 0, transition: 'opacity 0.3s',
+        }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0}>← 首頁</button>
+      </div>
+    );
+  }
+
+  function getPlayers(teamData) {
+    return Array.from({ length: 3 }, (_, i) => ({ ...MS_PLAYER_DEFAULT, ...(teamData?.players?.[i] || {}) }));
+  }
+
+  const t1players = getPlayers(team1);
+  const t2players = getPlayers(team2);
+
+  function avatarEl(id, player, color) {
+    const el = layout[id];
+    const w = el?.w || 140;
+    const brawler = player.avatarId ? BRAWLERS.find(b => b.id === player.avatarId) : null;
+    return (
+      <Draggable id={id}>
+        <div style={{ width: w, height: w, overflow: 'hidden', borderRadius: 6, background: `${color}22` }}>
+          {brawler
+            ? <img src={getPortrait(brawler)} alt={brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
+            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${color}66`, fontSize: Math.max(16, w * 0.3), fontWeight: 900 }}>?</div>}
+        </div>
+      </Draggable>
+    );
+  }
+
+  function nameEl(id, player, color) {
+    const el = layout[id];
+    const w = el?.w || 150;
+    const fontSize = Math.max(10, Math.round(w / 9));
+    return (
+      <Draggable id={id}>
+        <div style={{
+          width: w, textAlign: 'center', fontWeight: 900, fontSize,
+          letterSpacing: '0.06em', color: '#fff', textTransform: 'uppercase',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          textShadow: `0 0 12px ${color}99`,
+        }}>{player.name || '—'}</div>
+      </Draggable>
+    );
+  }
+
+  function numEl(id, value, color) {
+    const el = layout[id];
+    const w = el?.w || 120;
+    const fontSize = Math.max(14, Math.round(w / 3.5));
+    return (
+      <Draggable id={id}>
+        <div style={{
+          width: w, textAlign: 'center', fontWeight: 900, fontSize,
+          color, lineHeight: 1,
+          textShadow: `0 2px 10px ${color}88`,
+          fontVariantNumeric: 'tabular-nums',
+        }}>{value}</div>
+      </Draggable>
+    );
+  }
+
+  function labelEl(id, text) {
+    const el = layout[id];
+    const w = el?.w || 80;
+    const fontSize = Math.max(10, Math.round(w / 5));
+    return (
+      <Draggable id={id}>
+        <div style={{
+          width: w, textAlign: 'center', fontWeight: 900, fontSize,
+          color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>{text}</div>
+      </Draggable>
+    );
+  }
+
+  function titleEl() {
+    const el = layout['title'];
+    const w = el?.w || 260;
+    const fontSize = Math.max(14, Math.round(w / 10));
+    return (
+      <Draggable id="title">
+        <div style={{
+          width: w, textAlign: 'center', fontWeight: 900, fontSize,
+          letterSpacing: '0.14em', color: '#fff', textTransform: 'uppercase',
+          textShadow: '0 2px 16px rgba(0,0,0,0.8)',
+        }}>MATCH STATS</div>
+      </Draggable>
+    );
+  }
+
+  return (
+    <div ref={containerRef}
+      style={{ width: '100vw', height: '100vh', background: screenBg, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden' }}
+      onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
+
+      <button onClick={onBack} className="kurage-floating-control" style={{
+        position: 'absolute', top: 14, left: 14, zIndex: 300,
+        background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none',
+        padding: '5px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+        cursor: 'pointer', opacity: 0, transition: 'opacity 0.3s',
+      }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0}>← 首頁</button>
+
+      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 300, display: 'flex', gap: 8 }}>
+        {editMode && (<>
+          <button onClick={showAll} style={{ background: 'rgba(34,197,94,0.85)', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>顯示全部</button>
+          <button onClick={resetLayout} style={{ background: 'rgba(239,68,68,0.85)', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>重置位置</button>
+        </>)}
+        <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{
+          background: editMode ? '#facc15' : 'rgba(0,0,0,0.45)',
+          color: editMode ? '#1e293b' : '#fff',
+          border: editMode ? 'none' : '1px solid rgba(255,255,255,0.2)',
+          padding: '4px 14px', borderRadius: 7, fontSize: 12, fontWeight: 900,
+          cursor: 'pointer', opacity: editMode ? 1 : 0, transition: 'opacity 0.3s',
+        }} onMouseEnter={e => { if (!editMode) e.target.style.opacity = 1; }}
+           onMouseLeave={e => { if (!editMode) e.target.style.opacity = 0; }}>
+          {editMode ? '✓ 完成' : '✥ 編輯'}
+        </button>
+      </div>
+
+      {editMode && (
+        <div style={{
+          position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(250,204,21,0.9)', color: '#1e293b',
+          padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900,
+          zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap',
+        }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「顯示全部」「重置位置」</div>
+      )}
+
+      {titleEl()}
+
+      {/* 模式圖片 */}
+      {state.modeImage && (() => {
+        const el = layout['mode_image'];
+        const w = el?.w || 90;
+        return (
+          <Draggable id="mode_image">
+            <img src={state.modeImage} alt="mode"
+              style={{ width: w, height: w, objectFit: 'contain', display: 'block' }}
+              onError={e => e.target.style.display = 'none'} />
+          </Draggable>
+        );
+      })()}
+
+      {labelEl('kills_label',  'KILLS')}
+      {labelEl('deaths_label', 'DEATHS')}
+      {labelEl('dps_label',    'DPS')}
+
+      {[0, 1, 2].map(i => (<React.Fragment key={`t1_${i}`}>
+        {avatarEl(`t1_${i}_avatar`, t1players[i], t1color)}
+        {nameEl(`t1_${i}_name`,   t1players[i], t1color)}
+        {numEl(`t1_${i}_kills`,   t1players[i].kills,  t1color)}
+        {numEl(`t1_${i}_deaths`,  t1players[i].deaths, '#f87171')}
+        {numEl(`t1_${i}_dps`,     t1players[i].dps,    '#e2e8f0')}
+      </React.Fragment>))}
+
+      {[0, 1, 2].map(i => (<React.Fragment key={`t2_${i}`}>
+        {avatarEl(`t2_${i}_avatar`, t2players[i], t2color)}
+        {nameEl(`t2_${i}_name`,   t2players[i], t2color)}
+        {numEl(`t2_${i}_kills`,   t2players[i].kills,  t2color)}
+        {numEl(`t2_${i}_deaths`,  t2players[i].deaths, '#f87171')}
+        {numEl(`t2_${i}_dps`,     t2players[i].dps,    '#e2e8f0')}
+      </React.Fragment>))}
+    </div>
+  );
+}
+
 // ── 控制台 ────────────────────────────────────────────────────────────────────
 function LiveScoreOperator({ onBack }) {
   const [state, update] = useLiveScore();
@@ -5098,6 +5803,8 @@ const VIEW_COMPONENTS = {
   lottery: LotteryApp,
   live_operator: LiveScoreOperator,
   live_viewer: LiveScoreViewer,
+  match_stats_operator: MatchStatsOperator,
+  match_stats_viewer: MatchStatsViewer,
 };
 
 function getInitialView() {
