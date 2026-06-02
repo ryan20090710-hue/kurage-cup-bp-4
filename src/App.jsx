@@ -5083,7 +5083,7 @@ function MatchStatsViewer({ onBack }) {
     const brawler = player.avatarId ? BRAWLERS.find(b => b.id === player.avatarId) : null;
     return (
       <Draggable id={id}>
-        <div style={{ width: w, height: h, overflow: 'hidden', borderRadius: 6, background: `${color}22` }}>
+        <div style={{ width: w, height: h, overflow: 'hidden', borderRadius: 6, background: 'transparent' }}>
           {brawler
             ? <img src={getPortrait(brawler)} alt={brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
             : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${color}66`, fontSize: Math.max(16, h * 0.3), fontWeight: 900 }}>?</div>}
