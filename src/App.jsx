@@ -4848,8 +4848,24 @@ function MatchStatsOperator({ onBack }) {
           </div>
         </div>
 
-        <TeamSection team="team1" label="🔵 左隊（藍方）" />
-        <TeamSection team="team2" label="🔴 右隊（紅方）" />
+        <MsTeamSection
+          label="🔵 左隊（藍方）"
+          color={t1color}
+          players={state.team1?.players}
+          onColorChange={c => update('team1/color', c)}
+          onUpdatePlayer={(idx, field, v) => updatePlayer('team1', idx, field, v)}
+          onPickAvatar={idx => setPickerFor({ team: 'team1', idx })}
+          onClearAvatar={idx => updatePlayer('team1', idx, 'avatarId', '')}
+        />
+        <MsTeamSection
+          label="🔴 右隊（紅方）"
+          color={t2color}
+          players={state.team2?.players}
+          onColorChange={c => update('team2/color', c)}
+          onUpdatePlayer={(idx, field, v) => updatePlayer('team2', idx, field, v)}
+          onPickAvatar={idx => setPickerFor({ team: 'team2', idx })}
+          onClearAvatar={idx => updatePlayer('team2', idx, 'avatarId', '')}
+        />
       </main>
 
       {pickerFor && (
