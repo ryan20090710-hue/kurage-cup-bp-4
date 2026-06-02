@@ -4813,7 +4813,7 @@ function MatchStatsOperator({ onBack }) {
   const t2color = state.team2?.color || '#ff3838';
 
   return (
-    <div className="kurage-control-bg min-h-screen bg-slate-100 font-sans flex flex-col">
+    <div className="kurage-control-bg min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3 sticky top-0 z-10">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 text-sm">
