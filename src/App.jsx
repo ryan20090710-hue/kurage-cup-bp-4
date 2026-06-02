@@ -265,6 +265,44 @@ const GATE_LABELS = {
   match_stats_operator: { icon: '📊', name: '選手數據控制台' },
 };
 
+const ADMIN_UNLOCK_TTL_MS = 60 * 60 * 1000;
+const ADMIN_UNLOCK_STORAGE_PREFIX = 'kurage_admin_unlock_';
+
+const TARGET_TO_BUCKET = {
+  operator: 'brawl',
+  settings: 'brawl',
+  editmode: 'brawl',
+  reset: 'brawl',
+  bracket_operator: 'bracket',
+  scoreboard_operator: 'scoreboard',
+  live_operator: 'live',
+  match_stats_operator: 'live',
+};
+
+function getUnlockBucket(target) {
+  return TARGET_TO_BUCKET[target] ?? null;
+}
+
+function isTargetUnlocked(target) {
+  const bucket = getUnlockBucket(target);
+  if (!bucket) return false;
+  try {
+    const raw = localStorage.getItem(ADMIN_UNLOCK_STORAGE_PREFIX + bucket);
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return false;
+    return (Date.now() - ts) < ADMIN_UNLOCK_TTL_MS;
+  } catch { return false; }
+}
+
+function markTargetUnlocked(target) {
+  const bucket = getUnlockBucket(target);
+  if (!bucket) return;
+  try {
+    localStorage.setItem(ADMIN_UNLOCK_STORAGE_PREFIX + bucket, String(Date.now()));
+  } catch { /* localStorage unavailable — fall back to per-action prompts */ }
+}
+
 function PasswordGate({ target, onSuccess, onCancel, themeTokens = THEME_TOKENS.dark }) {
   const [input, setInput]   = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -296,7 +334,7 @@ function PasswordGate({ target, onSuccess, onCancel, themeTokens = THEME_TOKENS.
 
   const handleSubmit = () => {
     if (currentPw === null) return;
-    if (input === currentPw) { setError(false); onSuccess(); }
+    if (input === currentPw) { setError(false); markTargetUnlocked(target); onSuccess(); }
     else { setError(true); setInput(''); }
   };
 
@@ -619,7 +657,10 @@ function HomePage({ onNavigate, theme = 'dark', themeTokens = THEME_TOKENS.dark,
     }
   }
 
-  function openSettings() { setGateTarget('settings'); }
+  function openSettings() {
+    if (isTargetUnlocked('settings')) { openSettingsAfterAuth(); return; }
+    setGateTarget('settings');
+  }
   function openSettingsAfterAuth() {
     setDraft(JSON.parse(JSON.stringify(safeConfig)));
     setSettingsOpen(true);
@@ -650,10 +691,14 @@ function HomePage({ onNavigate, theme = 'dark', themeTokens = THEME_TOKENS.dark,
 
   function handleModeClick(id) {
     if (id === 'editmode') {
+      if (isTargetUnlocked('editmode')) { setEditMode(true); setToolsOpen(false); return; }
       setGateTarget('editmode');
       return;
     }
-    if (isProtectedView(id)) setGateTarget(id);
+    if (isProtectedView(id)) {
+      if (isTargetUnlocked(id)) { setToolsOpen(false); onNavigate(id); return; }
+      setGateTarget(id);
+    }
     else onNavigate(id);
   }
 
@@ -1595,7 +1640,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
               <span>⏱</span><span className="font-mono">{timeLeft}s</span>
             </div>
           )}
-          <button onClick={() => setResetGate(true)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition-colors shadow-lg hover:rotate-180 duration-500 relative">
+          <button onClick={() => { if (isTargetUnlocked('reset')) handleReset(); else setResetGate(true); }} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition-colors shadow-lg hover:rotate-180 duration-500 relative">
             <RotateCcw size={22} />
             <Lock size={9} className="absolute top-1 right-1 text-yellow-400" />
           </button>
@@ -1620,7 +1665,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
           lang={lang}
           t={t}
           coinWinner={coinWinner}
-          onReset={() => setResetGate(true)}
+          onReset={() => { if (isTargetUnlocked('reset')) handleReset(); else setResetGate(true); }}
         />
       )}
 
