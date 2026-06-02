@@ -4629,7 +4629,7 @@ function useLiveScore() {
 }
 
 // ── 選手對局數據 ──────────────────────────────────────────────────────────────
-const MS_PLAYER_DEFAULT = { name: '', kills: 0, deaths: 0, dps: 0, avatarId: '' };
+const MS_PLAYER_DEFAULT = { name: '', kills: 0, deaths: 0, dps: 0, ping: 0, avatarId: '' };
 const MATCH_STATS_DEFAULT = {
   visible: true,
   bgType: 'transparent',
@@ -4647,6 +4647,7 @@ function makeMsLayout() {
     kills_label:  { x: 46, y: 44, w:  80, visible: true },
     deaths_label: { x: 46, y: 53, w:  80, visible: true },
     dps_label:    { x: 46, y: 62, w:  80, visible: true },
+    ping_label:   { x: 46, y: 71, w:  80, visible: true },
   };
   const t1xs = [10, 21, 32];
   const t2xs = [60, 71, 82];
@@ -4656,11 +4657,13 @@ function makeMsLayout() {
     l[`t1_${i}_kills`]  = { x: t1xs[i], y: 44, w: 120, visible: true };
     l[`t1_${i}_deaths`] = { x: t1xs[i], y: 53, w: 120, visible: true };
     l[`t1_${i}_dps`]    = { x: t1xs[i], y: 62, w: 120, visible: true };
+    l[`t1_${i}_ping`]   = { x: t1xs[i], y: 71, w: 120, visible: true };
     l[`t2_${i}_avatar`] = { x: t2xs[i], y: 10, w: 140, visible: true };
     l[`t2_${i}_name`]   = { x: t2xs[i], y: 35, w: 150, visible: true };
     l[`t2_${i}_kills`]  = { x: t2xs[i], y: 44, w: 120, visible: true };
     l[`t2_${i}_deaths`] = { x: t2xs[i], y: 53, w: 120, visible: true };
     l[`t2_${i}_dps`]    = { x: t2xs[i], y: 62, w: 120, visible: true };
+    l[`t2_${i}_ping`]   = { x: t2xs[i], y: 71, w: 120, visible: true };
   });
   return l;
 }
@@ -4753,6 +4756,11 @@ function MsPlayerRow({ player, color, idx, onUpdate, onPickAvatar, onClearAvatar
         <MsNumInput value={p.dps} onCommit={v => onUpdate('dps', v)}
           className="w-20 p-1.5 border rounded-lg outline-none text-sm font-bold text-center focus:border-yellow-400" />
       </div>
+      <div className="flex flex-col items-center gap-0.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-400">PING</span>
+        <MsNumInput value={p.ping} onCommit={v => onUpdate('ping', v)}
+          className="w-20 p-1.5 border rounded-lg outline-none text-sm font-bold text-center focus:border-yellow-400" />
+      </div>
     </div>
   );
 }
@@ -4774,6 +4782,7 @@ function MsTeamSection({ label, color, players, onColorChange, onUpdatePlayer, o
         <span className="w-20 text-center">擊殺</span>
         <span className="w-20 text-center">死亡</span>
         <span className="w-20 text-center">DPS</span>
+        <span className="w-20 text-center">PING</span>
       </div>
       {[0, 1, 2].map(i => (
         <MsPlayerRow key={i} idx={i}
@@ -5155,6 +5164,7 @@ function MatchStatsViewer({ onBack }) {
       {labelEl('kills_label',  'KILLS')}
       {labelEl('deaths_label', 'DEATHS')}
       {labelEl('dps_label',    'DPS')}
+      {labelEl('ping_label',   'PING')}
 
       {[0, 1, 2].map(i => (<React.Fragment key={`t1_${i}`}>
         {avatarEl(`t1_${i}_avatar`, t1players[i], t1color)}
@@ -5162,6 +5172,7 @@ function MatchStatsViewer({ onBack }) {
         {numEl(`t1_${i}_kills`,   t1players[i].kills,  t1color)}
         {numEl(`t1_${i}_deaths`,  t1players[i].deaths, '#f87171')}
         {numEl(`t1_${i}_dps`,     t1players[i].dps,    '#e2e8f0')}
+        {numEl(`t1_${i}_ping`,    t1players[i].ping,   '#86efac')}
       </React.Fragment>))}
 
       {[0, 1, 2].map(i => (<React.Fragment key={`t2_${i}`}>
@@ -5170,6 +5181,7 @@ function MatchStatsViewer({ onBack }) {
         {numEl(`t2_${i}_kills`,   t2players[i].kills,  t2color)}
         {numEl(`t2_${i}_deaths`,  t2players[i].deaths, '#f87171')}
         {numEl(`t2_${i}_dps`,     t2players[i].dps,    '#e2e8f0')}
+        {numEl(`t2_${i}_ping`,    t2players[i].ping,   '#86efac')}
       </React.Fragment>))}
     </div>
   );
