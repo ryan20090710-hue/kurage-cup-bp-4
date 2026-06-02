@@ -5079,13 +5079,14 @@ function MatchStatsViewer({ onBack }) {
   function avatarEl(id, player, color) {
     const el = layout[id];
     const w = el?.w || 140;
+    const h = w * 1602 / 2400;
     const brawler = player.avatarId ? BRAWLERS.find(b => b.id === player.avatarId) : null;
     return (
       <Draggable id={id}>
-        <div style={{ width: w, height: w, overflow: 'hidden', borderRadius: 6, background: `${color}22` }}>
+        <div style={{ width: w, height: h, overflow: 'hidden', borderRadius: 6, background: `${color}22` }}>
           {brawler
             ? <img src={getPortrait(brawler)} alt={brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${color}66`, fontSize: Math.max(16, w * 0.3), fontWeight: 900 }}>?</div>}
+            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${color}66`, fontSize: Math.max(16, h * 0.3), fontWeight: 900 }}>?</div>}
         </div>
       </Draggable>
     );
