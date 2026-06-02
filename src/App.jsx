@@ -4630,12 +4630,23 @@ function useLiveScore() {
 
 // ── 選手對局數據 ──────────────────────────────────────────────────────────────
 const MS_PLAYER_DEFAULT = { name: '', kills: 0, deaths: 0, dps: 0, ping: 0, avatarId: '' };
+const MS_COLORS_DEFAULT = {
+  title:  '#ffffff',
+  label:  '#94a3b8',
+  name:   '#ffffff',
+  kills:  '',           // 空字串 = 跟隨隊伍顏色
+  deaths: '#f87171',
+  dps:    '#e2e8f0',
+  ping:   '#86efac',
+};
+
 const MATCH_STATS_DEFAULT = {
   visible: true,
   bgType: 'transparent',
   bgColor: '#0a0c14',
   bgImage: '',
   modeImage: '',
+  colors: { ...MS_COLORS_DEFAULT },
   team1: { color: '#1e88ff', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
   team2: { color: '#ff3838', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
 };
@@ -4676,7 +4687,7 @@ function useMatchStats() {
     const unsub = onValue(dbRef, snap => {
       const data = snap.val();
       if (data) {
-        const norm = { ...MATCH_STATS_DEFAULT, ...data };
+        const norm = { ...MATCH_STATS_DEFAULT, ...data, colors: { ...MS_COLORS_DEFAULT, ...(data.colors || {}) } };
         ['team1', 'team2'].forEach(t => {
           const td = data[t] || {};
           let players = td.players;
@@ -4857,6 +4868,36 @@ function MatchStatsOperator({ onBack }) {
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-sm mb-3 border-b pb-2">🎨 文字顏色</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              ['title',  '標題 MATCH STATS'],
+              ['label',  '欄位標籤 KILLS/DPS…'],
+              ['name',   '選手名稱'],
+              ['kills',  '擊殺數字（留空＝隊伍色）'],
+              ['deaths', '死亡數字'],
+              ['dps',    'DPS 數字'],
+              ['ping',   'PING 數字'],
+            ].map(([key, label]) => {
+              const v = state.colors?.[key] ?? '';
+              return (
+                <div key={key} className="flex gap-2 items-center">
+                  <input type="color" value={v && v.startsWith('#') ? v : '#ffffff'}
+                    onChange={e => update(`colors/${key}`, e.target.value)}
+                    className="w-9 h-8 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+                  <input type="text" value={v} placeholder={key === 'kills' ? '留空＝隊伍色' : '#ffffff'}
+                    onChange={e => update(`colors/${key}`, e.target.value)}
+                    className="w-24 p-1.5 border rounded outline-none text-xs font-mono focus:border-yellow-400" />
+                  <span className="text-xs text-slate-500 truncate">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={() => update('colors', { ...MS_COLORS_DEFAULT })}
+            className="mt-3 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-500">重置顏色</button>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
           <h2 className="font-bold text-sm mb-3 border-b pb-2">🎮 模式圖片</h2>
           <div className="flex gap-3 items-center">
             {state.modeImage && (
@@ -5005,8 +5046,11 @@ function MatchStatsViewer({ onBack }) {
   }
 
   const { team1, team2, visible, bgType, bgColor, bgImage } = state;
+  const colors = { ...MS_COLORS_DEFAULT, ...(state.colors || {}) };
   const t1color = team1?.color || '#1e88ff';
   const t2color = team2?.color || '#ff3838';
+  const killsColor1 = colors.kills || t1color;
+  const killsColor2 = colors.kills || t2color;
   const screenBg = bgType === 'color' ? (bgColor || '#0a0c14') : 'transparent';
   const screenBgStyle = bgType === 'image' && bgImage
     ? { background: `#0a0c14 center/cover no-repeat url("${bgImage}")` }
@@ -5055,7 +5099,7 @@ function MatchStatsViewer({ onBack }) {
       <Draggable id={id}>
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          letterSpacing: '0.06em', color: '#fff', textTransform: 'uppercase',
+          letterSpacing: '0.06em', color: colors.name, textTransform: 'uppercase',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           textShadow: `0 0 12px ${color}99`,
         }}>{player.name || '—'}</div>
@@ -5087,7 +5131,7 @@ function MatchStatsViewer({ onBack }) {
       <Draggable id={id}>
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase',
+          color: colors.label, letterSpacing: '0.1em', textTransform: 'uppercase',
         }}>{text}</div>
       </Draggable>
     );
@@ -5101,7 +5145,7 @@ function MatchStatsViewer({ onBack }) {
       <Draggable id="title">
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          letterSpacing: '0.14em', color: '#fff', textTransform: 'uppercase',
+          letterSpacing: '0.14em', color: colors.title, textTransform: 'uppercase',
           textShadow: '0 2px 16px rgba(0,0,0,0.8)',
         }}>MATCH STATS</div>
       </Draggable>
@@ -5169,19 +5213,19 @@ function MatchStatsViewer({ onBack }) {
       {[0, 1, 2].map(i => (<React.Fragment key={`t1_${i}`}>
         {avatarEl(`t1_${i}_avatar`, t1players[i], t1color)}
         {nameEl(`t1_${i}_name`,   t1players[i], t1color)}
-        {numEl(`t1_${i}_kills`,   t1players[i].kills,  t1color)}
-        {numEl(`t1_${i}_deaths`,  t1players[i].deaths, '#f87171')}
-        {numEl(`t1_${i}_dps`,     t1players[i].dps,    '#e2e8f0')}
-        {numEl(`t1_${i}_ping`,    t1players[i].ping,   '#86efac')}
+        {numEl(`t1_${i}_kills`,   t1players[i].kills,  killsColor1)}
+        {numEl(`t1_${i}_deaths`,  t1players[i].deaths, colors.deaths)}
+        {numEl(`t1_${i}_dps`,     t1players[i].dps,    colors.dps)}
+        {numEl(`t1_${i}_ping`,    t1players[i].ping,   colors.ping)}
       </React.Fragment>))}
 
       {[0, 1, 2].map(i => (<React.Fragment key={`t2_${i}`}>
         {avatarEl(`t2_${i}_avatar`, t2players[i], t2color)}
         {nameEl(`t2_${i}_name`,   t2players[i], t2color)}
-        {numEl(`t2_${i}_kills`,   t2players[i].kills,  t2color)}
-        {numEl(`t2_${i}_deaths`,  t2players[i].deaths, '#f87171')}
-        {numEl(`t2_${i}_dps`,     t2players[i].dps,    '#e2e8f0')}
-        {numEl(`t2_${i}_ping`,    t2players[i].ping,   '#86efac')}
+        {numEl(`t2_${i}_kills`,   t2players[i].kills,  killsColor2)}
+        {numEl(`t2_${i}_deaths`,  t2players[i].deaths, colors.deaths)}
+        {numEl(`t2_${i}_dps`,     t2players[i].dps,    colors.dps)}
+        {numEl(`t2_${i}_ping`,    t2players[i].ping,   colors.ping)}
       </React.Fragment>))}
     </div>
   );
