@@ -4634,6 +4634,7 @@ const MATCH_STATS_DEFAULT = {
   visible: true,
   bgType: 'transparent',
   bgColor: '#0a0c14',
+  bgImage: '',
   modeImage: '',
   team1: { color: '#1e88ff', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
   team2: { color: '#ff3838', players: [{ ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }, { ...MS_PLAYER_DEFAULT }] },
@@ -4819,7 +4820,7 @@ function MatchStatsOperator({ onBack }) {
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
           <h2 className="font-bold text-sm mb-3 border-b pb-2">🎨 畫面背景</h2>
           <div className="flex gap-3 mb-3">
-            {[['color','純色'],['transparent','透明']].map(([v, label]) => (
+            {[['color','純色'],['image','圖片'],['transparent','透明']].map(([v, label]) => (
               <button key={v} onClick={() => update('bgType', v)}
                 className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${state.bgType === v ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>{label}</button>
             ))}
@@ -4830,6 +4831,18 @@ function MatchStatsOperator({ onBack }) {
                 className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
               <input type="text" value={state.bgColor || ''} onChange={e => update('bgColor', e.target.value)}
                 className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" placeholder="#0a0c14" />
+            </div>
+          )}
+          {state.bgType === 'image' && (
+            <div className="flex gap-2 items-center">
+              {state.bgImage && (
+                <img src={state.bgImage} alt="bg" className="w-12 h-12 object-cover rounded-lg bg-slate-100 shrink-0" onError={e => e.target.style.display='none'} />
+              )}
+              <input type="text" value={state.bgImage || ''} onChange={e => update('bgImage', e.target.value)}
+                placeholder="貼上圖片網址 https://..." className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" />
+              {state.bgImage && (
+                <button onClick={() => update('bgImage', '')} className="px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-500 shrink-0">清除</button>
+              )}
             </div>
           )}
         </div>
@@ -4982,10 +4995,13 @@ function MatchStatsViewer({ onBack }) {
     );
   }
 
-  const { team1, team2, visible, bgType, bgColor } = state;
+  const { team1, team2, visible, bgType, bgColor, bgImage } = state;
   const t1color = team1?.color || '#1e88ff';
   const t2color = team2?.color || '#ff3838';
   const screenBg = bgType === 'color' ? (bgColor || '#0a0c14') : 'transparent';
+  const screenBgStyle = bgType === 'image' && bgImage
+    ? { background: `#0a0c14 center/cover no-repeat url("${bgImage}")` }
+    : { background: screenBg };
 
   if (!visible) {
     return (
@@ -5085,7 +5101,7 @@ function MatchStatsViewer({ onBack }) {
 
   return (
     <div ref={containerRef}
-      style={{ width: '100vw', height: '100vh', background: screenBg, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden' }}
+      style={{ width: '100vw', height: '100vh', ...screenBgStyle, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
