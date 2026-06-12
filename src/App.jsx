@@ -2372,10 +2372,12 @@ function ViewerView({ onBack }) {
 
   const titleFs = Math.max(20, Math.min(60, (layout.title?.w || 600) / 10));
   const bansLblFs = Math.max(14, Math.min(36, (layout.bans_lbl?.w || 180) / 6));
+  const stageScale = useStageScale();
 
   return (
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', fontFamily: 'sans-serif', ...bgStyle }}
+      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', fontFamily: 'sans-serif', ...bgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
@@ -2448,6 +2450,7 @@ function ViewerView({ onBack }) {
           <ViewerPickSlot pick={pick} size={layout[`t2_p${i}`]?.w} />
         </Draggable>
       ))}
+    </div>
     </div>
   );
 }
