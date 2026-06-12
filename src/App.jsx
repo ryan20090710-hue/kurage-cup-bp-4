@@ -4777,6 +4777,31 @@ function makeMsLayout() {
 }
 const MS_LAYOUT_DEFAULT = makeMsLayout();
 
+// 是否為「文字」元素（可調大小/顏色）；頭像與模式圖片除外
+function isMsTextEl(id) {
+  if (!id) return false;
+  if (id === 'title') return true;
+  if (id.endsWith('_avatar') || id === 'mode_image') return false;
+  return /_(label|name|kills|deaths|dps|ping)$/.test(id);
+}
+// 依元素類型與寬度推算「自動」字級（與 viewer 內 renderer 的公式一致）
+function msDerivedFont(id, w) {
+  if (id === 'title') return Math.max(14, Math.round((w || 260) / 10));
+  if (id.endsWith('_label')) return Math.max(10, Math.round((w || 80) / 5));
+  if (id.endsWith('_name')) return Math.max(10, Math.round((w || 150) / 9));
+  return Math.max(14, Math.round((w || 120) / 3.5)); // 數字
+}
+// 編輯面板上顯示的易讀名稱
+function msElLabel(id) {
+  if (id === 'title') return '標題';
+  const lbl = { kills_label: 'KILLS 標籤', deaths_label: 'DEATHS 標籤', dps_label: 'DPS 標籤', ping_label: 'PING 標籤' };
+  if (lbl[id]) return lbl[id];
+  const field = { name: '名稱', kills: '擊殺', deaths: '死亡', dps: 'DPS', ping: 'PING' };
+  const m = id.match(/^t([12])_(\d)_(\w+)$/);
+  if (m) return `${m[1] === '1' ? '藍' : '紅'}${Number(m[2]) + 1} ${field[m[3]] || m[3]}`;
+  return id;
+}
+
 function useMatchStats() {
   const [state, setState] = useState(MATCH_STATS_DEFAULT);
   useEffect(() => {
@@ -5042,6 +5067,7 @@ function MatchStatsViewer({ onBack }) {
   const [state] = useMatchStats();
   const [layout, setLayout] = useState(MS_LAYOUT_DEFAULT);
   const [editMode, setEditMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const containerRef = useRef(null);
   const layoutRef = useRef(layout);
   const draggingRef = useRef(null);
@@ -5050,6 +5076,7 @@ function MatchStatsViewer({ onBack }) {
   const resizeStartRef = useRef({ mx: 0, w: 0 });
   const { scale: stageScale, h: stageH } = useStageScale(state?.bgType === 'image' ? state?.bgImage : '');
   useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
 
   useEffect(() => {
     const dbRef = ref(liveScoreDb, 'match_stats_layout');
@@ -5071,6 +5098,7 @@ function MatchStatsViewer({ onBack }) {
     const el = layoutRef.current[key];
     dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
     draggingRef.current = key;
+    setSelectedId(key);
   }
   function startResize(e, key) {
     e.preventDefault(); e.stopPropagation();
@@ -5102,6 +5130,14 @@ function MatchStatsViewer({ onBack }) {
   function hideEl(key) {
     const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
     setLayout(l); saveLayout(l);
+    setSelectedId(s => (s === key ? null : s));
+  }
+  // 設定單一元素的字級/顏色覆寫（空值＝清除覆寫，回到自動）
+  function setElStyle(key, patch) {
+    const cur = { ...layoutRef.current[key] };
+    Object.entries(patch).forEach(([k, v]) => { if (v == null || v === '') delete cur[k]; else cur[k] = v; });
+    const l = { ...layoutRef.current, [key]: cur };
+    setLayout(l); saveLayout(l);
   }
   function showAll() {
     const l = { ...layoutRef.current };
@@ -5118,7 +5154,7 @@ function MatchStatsViewer({ onBack }) {
           position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: el.w,
           cursor: editMode ? 'grab' : 'default',
           userSelect: 'none', zIndex: 10,
-          outline: editMode ? '1.5px dashed rgba(250,204,21,0.6)' : 'none',
+          outline: editMode ? (id === selectedId ? '2px solid #38bdf8' : '1.5px dashed rgba(250,204,21,0.6)') : 'none',
           borderRadius: 6,
         }}>
         {children}
@@ -5193,12 +5229,13 @@ function MatchStatsViewer({ onBack }) {
   function nameEl(id, player, color) {
     const el = layout[id];
     const w = el?.w || 150;
-    const fontSize = Math.max(10, Math.round(w / 9));
+    const fontSize = el?.fontSize ?? Math.max(10, Math.round(w / 9));
+    const textColor = el?.color || colors.name;
     return (
       <Draggable id={id}>
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          letterSpacing: '0.06em', color: colors.name, textTransform: 'uppercase',
+          letterSpacing: '0.06em', color: textColor, textTransform: 'uppercase',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           textShadow: `0 0 12px ${color}99`,
         }}>{player.name || '—'}</div>
@@ -5209,13 +5246,14 @@ function MatchStatsViewer({ onBack }) {
   function numEl(id, value, color) {
     const el = layout[id];
     const w = el?.w || 120;
-    const fontSize = Math.max(14, Math.round(w / 3.5));
+    const fontSize = el?.fontSize ?? Math.max(14, Math.round(w / 3.5));
+    const textColor = el?.color || color;
     return (
       <Draggable id={id}>
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          color, lineHeight: 1,
-          textShadow: `0 2px 10px ${color}88`,
+          color: textColor, lineHeight: 1,
+          textShadow: `0 2px 10px ${textColor}88`,
           fontVariantNumeric: 'tabular-nums',
         }}>{value}</div>
       </Draggable>
@@ -5225,12 +5263,13 @@ function MatchStatsViewer({ onBack }) {
   function labelEl(id, text) {
     const el = layout[id];
     const w = el?.w || 80;
-    const fontSize = Math.max(10, Math.round(w / 5));
+    const fontSize = el?.fontSize ?? Math.max(10, Math.round(w / 5));
+    const textColor = el?.color || colors.label;
     return (
       <Draggable id={id}>
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          color: colors.label, letterSpacing: '0.1em', textTransform: 'uppercase',
+          color: textColor, letterSpacing: '0.1em', textTransform: 'uppercase',
         }}>{text}</div>
       </Draggable>
     );
@@ -5239,12 +5278,13 @@ function MatchStatsViewer({ onBack }) {
   function titleEl() {
     const el = layout['title'];
     const w = el?.w || 260;
-    const fontSize = Math.max(14, Math.round(w / 10));
+    const fontSize = el?.fontSize ?? Math.max(14, Math.round(w / 10));
+    const textColor = el?.color || colors.title;
     return (
       <Draggable id="title">
         <div style={{
           width: w, textAlign: 'center', fontWeight: 900, fontSize,
-          letterSpacing: '0.14em', color: colors.title, textTransform: 'uppercase',
+          letterSpacing: '0.14em', color: textColor, textTransform: 'uppercase',
           textShadow: '0 2px 16px rgba(0,0,0,0.8)',
         }}>MATCH STATS</div>
       </Draggable>
@@ -5287,7 +5327,7 @@ function MatchStatsViewer({ onBack }) {
           background: 'rgba(250,204,21,0.9)', color: '#1e293b',
           padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900,
           zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap',
-        }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「顯示全部」「重置位置」</div>
+        }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「顯示全部」「重置位置」</div>
       )}
 
       {titleEl()}
@@ -5328,6 +5368,52 @@ function MatchStatsViewer({ onBack }) {
         {numEl(`t2_${i}_ping`,    t2players[i].ping,   colors.ping)}
       </React.Fragment>))}
     </div>
+
+    {/* 選取文字後的「大小 / 顏色」浮動面板（固定大小，不隨舞台縮放） */}
+    {editMode && selectedId && isMsTextEl(selectedId) && layout[selectedId]?.visible && (() => {
+      const el = layout[selectedId];
+      const curSize = Math.round(el.fontSize ?? msDerivedFont(selectedId, el.w));
+      const effColor = el.color
+        || (selectedId === 'title' ? colors.title
+          : selectedId.endsWith('_label') ? colors.label
+          : selectedId.endsWith('_name') ? colors.name
+          : selectedId.endsWith('_kills') ? (colors.kills || (selectedId.startsWith('t1') ? t1color : t2color))
+          : selectedId.endsWith('_deaths') ? colors.deaths
+          : selectedId.endsWith('_dps') ? colors.dps
+          : selectedId.endsWith('_ping') ? colors.ping
+          : '#ffffff');
+      const pickerColor = (effColor && effColor.startsWith('#')) ? effColor : '#ffffff';
+      return (
+        <div style={{
+          position: 'fixed', top: 58, left: 14, zIndex: 400, width: 240,
+          background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 12,
+          padding: '12px 14px', boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
+          fontFamily: 'sans-serif', border: '1px solid rgba(255,255,255,0.12)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>✎ {msElLabel(selectedId)}</span>
+            <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
+            <span>文字大小</span><span style={{ fontWeight: 700 }}>{curSize}px</span>
+          </div>
+          <input type="range" min="8" max="160" value={curSize}
+            onChange={e => setElStyle(selectedId, { fontSize: Number(e.target.value) })}
+            style={{ width: '100%', accentColor: '#facc15' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+            <span style={{ fontSize: 11, opacity: 0.75 }}>顏色</span>
+            <input type="color" value={pickerColor}
+              onChange={e => setElStyle(selectedId, { color: e.target.value })}
+              style={{ width: 34, height: 28, padding: 0, border: 'none', borderRadius: 6, cursor: 'pointer', background: 'transparent' }} />
+            <input type="text" value={el.color || ''} placeholder="自動"
+              onChange={e => setElStyle(selectedId, { color: e.target.value })}
+              style={{ width: 88, fontSize: 11, padding: '5px 7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
+          </div>
+          <button onClick={() => setElStyle(selectedId, { fontSize: null, color: null })}
+            style={{ marginTop: 12, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復自動大小/顏色</button>
+        </div>
+      );
+    })()}
     </div>
   );
 }
