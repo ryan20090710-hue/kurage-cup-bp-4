@@ -2321,7 +2321,7 @@ function ViewerView({ onBack }) {
     }
     if (resizingRef.current) {
       const key = resizingRef.current;
-      const dx = cx - resizeStartRef.current.mx;
+      const dx = (cx - resizeStartRef.current.mx) / stageScale;
       const newW = Math.max(40, resizeStartRef.current.w + dx);
       setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
     }
@@ -2678,7 +2678,7 @@ function BracketViewer({ onBack }) {
     }
     if (resizingRef.current) {
       const key = resizingRef.current;
-      const dx = cx - resizeStartRef.current.mx;
+      const dx = (cx - resizeStartRef.current.mx) / stageScale;
       const newW = Math.max(120, resizeStartRef.current.w + dx);
       setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
     }
@@ -2727,9 +2727,12 @@ function BracketViewer({ onBack }) {
     );
   }
 
+  const stageScale = useStageScale();
+
   return (
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', ...bgStyle }}
+      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', ...bgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
 
@@ -2783,6 +2786,7 @@ function BracketViewer({ onBack }) {
       <Draggable id="fin_1"><TeamSlot name={fin1} score={final?.s2} isWin={finalW===1} isLose={finalW===0} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_1?.w} /></Draggable>
 
       <Draggable id="champion"><ChampionBadge name={champion} width={layout.champion?.w} /></Draggable>
+    </div>
     </div>
   );
 }
@@ -3298,7 +3302,7 @@ function ScoreboardViewer({ onBack }) {
     }
     if (resizingRef.current) {
       const key = resizingRef.current;
-      const newW = Math.max(60, resizeStartRef.current.w + (cx - resizeStartRef.current.mx));
+      const newW = Math.max(60, resizeStartRef.current.w + (cx - resizeStartRef.current.mx) / stageScale);
       setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
     }
   }
@@ -3327,9 +3331,12 @@ function ScoreboardViewer({ onBack }) {
 
   const visGames = games.slice(0, maxWins * 2 - 1);
 
+  const stageScale = useStageScale();
+
   return (
+    <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}>
     <div ref={containerRef}
-      style={{ width:'100vw', height:'100vh', overflow:'hidden', position:'relative', ...bgStyle, fontFamily:'sans-serif' }}
+      style={{ width:STAGE_W, height:STAGE_H, flex:'0 0 auto', overflow:'hidden', position:'relative', transform:`scale(${stageScale})`, transformOrigin:'center center', ...bgStyle, fontFamily:'sans-serif' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
@@ -3425,6 +3432,7 @@ function ScoreboardViewer({ onBack }) {
       <Draggable id="t2_wins">
         <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t2_wins?.w||100,1.5,36,110), color:winColor||'#ec4899' }}>{w2}</div>
       </Draggable>
+    </div>
     </div>
   );
 }
@@ -5059,7 +5067,7 @@ function MatchStatsViewer({ onBack }) {
     }
     if (resizingRef.current) {
       const key = resizingRef.current;
-      const dx = cx - resizeStartRef.current.mx;
+      const dx = (cx - resizeStartRef.current.mx) / stageScale;
       const newW = Math.max(40, resizeStartRef.current.w + dx);
       setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
     }
@@ -5220,9 +5228,12 @@ function MatchStatsViewer({ onBack }) {
     );
   }
 
+  const stageScale = useStageScale();
+
   return (
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: '100vw', height: '100vh', ...screenBgStyle, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden' }}
+      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', ...screenBgStyle, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden', transform: `scale(${stageScale})`, transformOrigin: 'center center' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
@@ -5295,6 +5306,7 @@ function MatchStatsViewer({ onBack }) {
         {numEl(`t2_${i}_dps`,     t2players[i].dps,    colors.dps)}
         {numEl(`t2_${i}_ping`,    t2players[i].ping,   colors.ping)}
       </React.Fragment>))}
+    </div>
     </div>
   );
 }
@@ -5663,7 +5675,7 @@ function LiveScoreViewer({ onBack }) {
     }
     if (resizingRef.current) {
       const key = resizingRef.current;
-      const dx = cx - resizeStartRef.current.mx;
+      const dx = (cx - resizeStartRef.current.mx) / stageScale;
       const newW = Math.max(50, resizeStartRef.current.w + dx);
       setLayout(l => ({ ...l, [key]: { ...l[key], w: newW } }));
     }
@@ -5717,9 +5729,12 @@ function LiveScoreViewer({ onBack }) {
 
   function fs(w, base, min = 12, max = 80) { return Math.max(min, Math.min(max, w / base)); }
 
+  const stageScale = useStageScale();
+
   return (
+    <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
     <div ref={containerRef}
-      style={{ width:'100vw', height:'100vh', background:'transparent', position:'relative', fontFamily:'sans-serif' }}
+      style={{ width:STAGE_W, height:STAGE_H, flex:'0 0 auto', overflow:'hidden', background:'transparent', position:'relative', fontFamily:'sans-serif', transform:`scale(${stageScale})`, transformOrigin:'center center' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
@@ -5944,6 +5959,7 @@ function LiveScoreViewer({ onBack }) {
           })}
         </div>
       </Draggable>
+    </div>
     </div>
   );
 }
