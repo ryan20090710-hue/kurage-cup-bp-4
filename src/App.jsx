@@ -2191,14 +2191,35 @@ function OperatorPanel({ onBack }) {
   );
 }
 
-// ─── 直播畫面統一縮放：固定 16:9 (1920×1080) 舞台，等比例縮放填滿任何裝置 ───
-const STAGE_W = 1920, STAGE_H = 1080;
+// ─── 直播畫面統一縮放：以背景圖比例當畫布，等比例縮放填滿任何裝置（無背景圖則用 16:9）───
+const STAGE_W = 1920;
+const DEFAULT_STAGE_RATIO = 16 / 9;
 
-function useStageScale() {
+function useStageScale(bgSrc) {
+  const [ratio, setRatio] = useState(DEFAULT_STAGE_RATIO);
   const [scale, setScale] = useState(1);
+
+  // 背景是圖片 → 量出圖片實際長寬比，讓畫布跟著圖片走（不裁切）；否則維持 16:9
   useEffect(() => {
-    const calc = () => setScale(Math.min(window.innerWidth / STAGE_W,
-                                         window.innerHeight / STAGE_H));
+    const src = typeof bgSrc === 'string' ? bgSrc.trim() : '';
+    const isImg = src && !src.startsWith('#') && src !== 'transparent';
+    if (!isImg) { setRatio(DEFAULT_STAGE_RATIO); return; }
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled && img.naturalWidth && img.naturalHeight) {
+        setRatio(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.onerror = () => { if (!cancelled) setRatio(DEFAULT_STAGE_RATIO); };
+    img.src = src;
+    return () => { cancelled = true; };
+  }, [bgSrc]);
+
+  const h = Math.round(STAGE_W / ratio);
+
+  useEffect(() => {
+    const calc = () => setScale(Math.min(window.innerWidth / STAGE_W, window.innerHeight / h));
     calc();
     window.addEventListener('resize', calc);
     window.addEventListener('orientationchange', calc);
@@ -2206,8 +2227,9 @@ function useStageScale() {
       window.removeEventListener('resize', calc);
       window.removeEventListener('orientationchange', calc);
     };
-  }, []);
-  return scale;
+  }, [h]);
+
+  return { scale, w: STAGE_W, h };
 }
 
 function ViewerBanSlot({ ban, size }) {
@@ -2372,12 +2394,12 @@ function ViewerView({ onBack }) {
 
   const titleFs = Math.max(20, Math.min(60, (layout.title?.w || 600) / 10));
   const bansLblFs = Math.max(14, Math.min(36, (layout.bans_lbl?.w || 180) / 6));
-  const stageScale = useStageScale();
+  const { scale: stageScale, h: stageH } = useStageScale(state.background);
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', fontFamily: 'sans-serif', ...bgStyle }}
+      style={{ width: STAGE_W, height: stageH, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', fontFamily: 'sans-serif', ...bgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
@@ -2727,12 +2749,12 @@ function BracketViewer({ onBack }) {
     );
   }
 
-  const stageScale = useStageScale();
+  const { scale: stageScale, h: stageH } = useStageScale(background);
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', ...bgStyle }}
+      style={{ width: STAGE_W, height: stageH, flex: '0 0 auto', overflow: 'hidden', position: 'relative', transform: `scale(${stageScale})`, transformOrigin: 'center center', ...bgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
 
@@ -3331,12 +3353,12 @@ function ScoreboardViewer({ onBack }) {
 
   const visGames = games.slice(0, maxWins * 2 - 1);
 
-  const stageScale = useStageScale();
+  const { scale: stageScale, h: stageH } = useStageScale(background);
 
   return (
     <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}>
     <div ref={containerRef}
-      style={{ width:STAGE_W, height:STAGE_H, flex:'0 0 auto', overflow:'hidden', position:'relative', transform:`scale(${stageScale})`, transformOrigin:'center center', ...bgStyle, fontFamily:'sans-serif' }}
+      style={{ width:STAGE_W, height:stageH, flex:'0 0 auto', overflow:'hidden', position:'relative', transform:`scale(${stageScale})`, transformOrigin:'center center', ...bgStyle, fontFamily:'sans-serif' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{ position:'absolute',top:10,left:10,zIndex:300,background:'rgba(0,0,0,0.55)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer',opacity:0,transition:'opacity 0.3s' }} onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>← 首頁</button>
@@ -5026,7 +5048,7 @@ function MatchStatsViewer({ onBack }) {
   const resizingRef = useRef(null);
   const dragOffRef = useRef({ x: 0, y: 0 });
   const resizeStartRef = useRef({ mx: 0, w: 0 });
-  const stageScale = useStageScale();
+  const { scale: stageScale, h: stageH } = useStageScale(state?.bgType === 'image' ? state?.bgImage : '');
   useEffect(() => { layoutRef.current = layout; }, [layout]);
 
   useEffect(() => {
@@ -5232,7 +5254,7 @@ function MatchStatsViewer({ onBack }) {
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div ref={containerRef}
-      style={{ width: STAGE_W, height: STAGE_H, flex: '0 0 auto', ...screenBgStyle, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden', transform: `scale(${stageScale})`, transformOrigin: 'center center' }}
+      style={{ width: STAGE_W, height: stageH, flex: '0 0 auto', ...screenBgStyle, position: 'relative', fontFamily: 'sans-serif', overflow: 'hidden', transform: `scale(${stageScale})`, transformOrigin: 'center center' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
@@ -5610,7 +5632,7 @@ function LiveScoreViewer({ onBack }) {
   const resizeStartRef = useRef({ mx: 0, w: 0 });
   const layoutRef = useRef(layout);
   const containerRef = useRef(null);
-  const stageScale = useStageScale();
+  const { scale: stageScale, h: stageH } = useStageScale();
   useEffect(() => { layoutRef.current = layout; }, [layout]);
 
   const { team1, team2, maxWins = 3, bgColor, blueColor, redColor, textColor, scoreTextColor, visible } = state;
@@ -5732,7 +5754,7 @@ function LiveScoreViewer({ onBack }) {
   return (
     <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
     <div ref={containerRef}
-      style={{ width:STAGE_W, height:STAGE_H, flex:'0 0 auto', overflow:'hidden', background:'transparent', position:'relative', fontFamily:'sans-serif', transform:`scale(${stageScale})`, transformOrigin:'center center' }}
+      style={{ width:STAGE_W, height:stageH, flex:'0 0 auto', overflow:'hidden', background:'transparent', position:'relative', fontFamily:'sans-serif', transform:`scale(${stageScale})`, transformOrigin:'center center' }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
