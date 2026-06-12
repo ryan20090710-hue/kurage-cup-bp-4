@@ -5026,6 +5026,7 @@ function MatchStatsViewer({ onBack }) {
   const resizingRef = useRef(null);
   const dragOffRef = useRef({ x: 0, y: 0 });
   const resizeStartRef = useRef({ mx: 0, w: 0 });
+  const stageScale = useStageScale();
   useEffect(() => { layoutRef.current = layout; }, [layout]);
 
   useEffect(() => {
@@ -5227,8 +5228,6 @@ function MatchStatsViewer({ onBack }) {
       </Draggable>
     );
   }
-
-  const stageScale = useStageScale();
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -5611,6 +5610,7 @@ function LiveScoreViewer({ onBack }) {
   const resizeStartRef = useRef({ mx: 0, w: 0 });
   const layoutRef = useRef(layout);
   const containerRef = useRef(null);
+  const stageScale = useStageScale();
   useEffect(() => { layoutRef.current = layout; }, [layout]);
 
   const { team1, team2, maxWins = 3, bgColor, blueColor, redColor, textColor, scoreTextColor, visible } = state;
@@ -5728,8 +5728,6 @@ function LiveScoreViewer({ onBack }) {
   }
 
   function fs(w, base, min = 12, max = 80) { return Math.max(min, Math.min(max, w / base)); }
-
-  const stageScale = useStageScale();
 
   return (
     <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
