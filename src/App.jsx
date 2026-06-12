@@ -2191,6 +2191,25 @@ function OperatorPanel({ onBack }) {
   );
 }
 
+// ─── 直播畫面統一縮放：固定 16:9 (1920×1080) 舞台，等比例縮放填滿任何裝置 ───
+const STAGE_W = 1920, STAGE_H = 1080;
+
+function useStageScale() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const calc = () => setScale(Math.min(window.innerWidth / STAGE_W,
+                                         window.innerHeight / STAGE_H));
+    calc();
+    window.addEventListener('resize', calc);
+    window.addEventListener('orientationchange', calc);
+    return () => {
+      window.removeEventListener('resize', calc);
+      window.removeEventListener('orientationchange', calc);
+    };
+  }, []);
+  return scale;
+}
+
 function ViewerBanSlot({ ban, size }) {
   const s = size || 75;
   return (
