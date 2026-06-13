@@ -2232,6 +2232,48 @@ function useStageScale(bgSrc) {
   return { scale, w: STAGE_W, h };
 }
 
+// 文字大小/顏色覆寫小工具：元素自帶 fontSize/color 就用它，否則回退到自動值
+const elFontSize = (el, auto) => (el && el.fontSize != null ? el.fontSize : auto);
+const elColor = (el, auto) => (el && el.color ? el.color : auto);
+
+// 觀戰畫面共用的「文字大小 / 顏色」浮動編輯面板（固定大小，不隨舞台縮放）
+function StageStylePanel({ label, el, autoSize, autoColor, sizeMin = 8, sizeMax = 200, onPatch, onClose }) {
+  if (!el) return null;
+  const curSize = Math.round(el.fontSize ?? autoSize);
+  const pickerColor = (el.color && el.color.startsWith('#')) ? el.color
+    : (typeof autoColor === 'string' && autoColor.startsWith('#')) ? autoColor : '#ffffff';
+  return (
+    <div style={{
+      position: 'fixed', top: 58, left: 14, zIndex: 400, width: 240,
+      background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 12,
+      padding: '12px 14px', boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
+      fontFamily: 'sans-serif', border: '1px solid rgba(255,255,255,0.12)',
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>✎ {label}</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
+        <span>文字大小</span><span style={{ fontWeight: 700 }}>{curSize}px</span>
+      </div>
+      <input type="range" min={sizeMin} max={sizeMax} value={curSize}
+        onChange={e => onPatch({ fontSize: Number(e.target.value) })}
+        style={{ width: '100%', accentColor: '#facc15' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <span style={{ fontSize: 11, opacity: 0.75 }}>顏色</span>
+        <input type="color" value={pickerColor}
+          onChange={e => onPatch({ color: e.target.value })}
+          style={{ width: 34, height: 28, padding: 0, border: 'none', borderRadius: 6, cursor: 'pointer', background: 'transparent' }} />
+        <input type="text" value={el.color || ''} placeholder="自動"
+          onChange={e => onPatch({ color: e.target.value })}
+          style={{ width: 88, fontSize: 11, padding: '5px 7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
+      </div>
+      <button onClick={() => onPatch({ fontSize: null, color: null })}
+        style={{ marginTop: 12, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復自動大小/顏色</button>
+    </div>
+  );
+}
+
 function ViewerBanSlot({ ban, size }) {
   const s = size || 75;
   return (
@@ -2282,10 +2324,25 @@ const DEFAULT_BP_LAYOUT = {
   t2_p2: { x: 74, y: 84, w: 120, visible: true },
 };
 
+// BP 畫面可調大小/顏色的文字元素
+function isBpTextEl(id) {
+  return id === 'title' || id === 'bans_lbl' || id === 't1_name' || id === 't2_name' || /^t[12]_pn\d$/.test(id);
+}
+function bpElLabel(id) {
+  if (id === 'title') return '標題';
+  if (id === 'bans_lbl') return 'BANS 標籤';
+  if (id === 't1_name') return '藍隊名稱';
+  if (id === 't2_name') return '紅隊名稱';
+  const m = id.match(/^t([12])_pn(\d)$/);
+  if (m) return `${m[1] === '1' ? '藍' : '紅'}${Number(m[2]) + 1} 名稱`;
+  return id;
+}
+
 function ViewerView({ onBack }) {
   const [state] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
   const [layout, setLayout] = useState(DEFAULT_BP_LAYOUT);
   const [editMode, setEditMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const draggingRef = useRef(null);
   const resizingRef = useRef(null);
   const dragOffRef  = useRef({ x: 0, y: 0 });
@@ -2293,6 +2350,7 @@ function ViewerView({ onBack }) {
   const layoutRef = useRef(layout);
   const containerRef = useRef(null);
   useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
 
   useEffect(() => {
     const dbRef = ref(bracketDb, 'bp_viewer_layout');
@@ -2321,6 +2379,7 @@ function ViewerView({ onBack }) {
       : (el.x / 100) * rect.width;
     dragOffRef.current = { x: cx - rect.left - elLeft, y: cy - rect.top - (el.y / 100) * rect.height };
     draggingRef.current = key;
+    setSelectedId(key);
   }
   function startResize(e, key) {
     e.preventDefault(); e.stopPropagation();
@@ -2355,6 +2414,13 @@ function ViewerView({ onBack }) {
   function hideEl(key) {
     const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
     setLayout(l); saveLayout(l);
+    setSelectedId(s => (s === key ? null : s));
+  }
+  function setElStyle(key, patch) {
+    const cur = { ...layoutRef.current[key] };
+    Object.entries(patch).forEach(([k, v]) => { if (v == null || v === '') delete cur[k]; else cur[k] = v; });
+    const l = { ...layoutRef.current, [key]: cur };
+    setLayout(l); saveLayout(l);
   }
   function resetLayout() { setLayout(DEFAULT_BP_LAYOUT); saveLayout(DEFAULT_BP_LAYOUT); }
 
@@ -2367,7 +2433,7 @@ function ViewerView({ onBack }) {
           position: 'absolute', left, top: `${el.y}%`, width: el.w,
           cursor: editMode ? 'grab' : 'default',
           userSelect: 'none', zIndex: 10,
-          outline: editMode ? '1.5px dashed rgba(250,204,21,0.55)' : 'none',
+          outline: editMode ? (id === selectedId ? '2px solid #38bdf8' : '1.5px dashed rgba(250,204,21,0.55)') : 'none',
           borderRadius: 10,
         }}>
         {children}
@@ -2423,14 +2489,14 @@ function ViewerView({ onBack }) {
         </button>
       </div>
 
-      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
       <Draggable id="title">
-        <h1 style={{ fontSize: titleFs, fontWeight: 800, textAlign: 'center', letterSpacing: '0.2em', color: '#fff', textShadow: '2px 2px 4px rgba(0,0,0,0.4)', margin: 0, padding: 0, whiteSpace: 'nowrap' }}>{state.matchTitle}</h1>
+        <h1 style={{ fontSize: elFontSize(layout.title, titleFs), fontWeight: 800, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.title, '#fff'), textShadow: '2px 2px 4px rgba(0,0,0,0.4)', margin: 0, padding: 0, whiteSpace: 'nowrap' }}>{state.matchTitle}</h1>
       </Draggable>
 
       <Draggable id="bans_lbl">
-        <div style={{ fontSize: bansLblFs, fontWeight: 900, textAlign: 'center', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)', textShadow: '2px 2px 4px rgba(0,0,0,0.4)' }}>BANS</div>
+        <div style={{ fontSize: elFontSize(layout.bans_lbl, bansLblFs), fontWeight: 900, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.bans_lbl, 'rgba(255,255,255,0.5)'), textShadow: '2px 2px 4px rgba(0,0,0,0.4)' }}>BANS</div>
       </Draggable>
 
       {state.team1.bans.map((ban, i) => (
@@ -2445,20 +2511,20 @@ function ViewerView({ onBack }) {
       ))}
 
       <Draggable id="t1_name">
-        <h2 style={{ fontSize: Math.max(14, Math.min(44, (layout.t1_name?.w || 260) / 8)), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: state.team1.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team1.name}</h2>
+        <h2 style={{ fontSize: elFontSize(layout.t1_name, Math.max(14, Math.min(44, (layout.t1_name?.w || 260) / 8))), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: elColor(layout.t1_name, state.team1.color), textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team1.name}</h2>
       </Draggable>
       <Draggable id="t2_name">
-        <h2 style={{ fontSize: Math.max(14, Math.min(44, (layout.t2_name?.w || 260) / 8)), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: state.team2.color, textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team2.name}</h2>
+        <h2 style={{ fontSize: elFontSize(layout.t2_name, Math.max(14, Math.min(44, (layout.t2_name?.w || 260) / 8))), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: elColor(layout.t2_name, state.team2.color), textShadow: '2px 2px 4px rgba(0,0,0,0.6)', margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team2.name}</h2>
       </Draggable>
 
       {state.team1.picks.map((pick, i) => (
         <Draggable key={`t1_pn${i}`} id={`t1_pn${i}`}>
-          <div style={{ fontSize: Math.max(12, Math.min(28, (layout[`t1_pn${i}`]?.w || 140) / 6)), fontWeight: 700, color: '#fff', textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
+          <div style={{ fontSize: elFontSize(layout[`t1_pn${i}`], Math.max(12, Math.min(28, (layout[`t1_pn${i}`]?.w || 140) / 6))), fontWeight: 700, color: elColor(layout[`t1_pn${i}`], '#fff'), textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
         </Draggable>
       ))}
       {state.team2.picks.map((pick, i) => (
         <Draggable key={`t2_pn${i}`} id={`t2_pn${i}`}>
-          <div style={{ fontSize: Math.max(12, Math.min(28, (layout[`t2_pn${i}`]?.w || 140) / 6)), fontWeight: 700, color: '#fff', textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
+          <div style={{ fontSize: elFontSize(layout[`t2_pn${i}`], Math.max(12, Math.min(28, (layout[`t2_pn${i}`]?.w || 140) / 6))), fontWeight: 700, color: elColor(layout[`t2_pn${i}`], '#fff'), textAlign: 'center', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player}</div>
         </Draggable>
       ))}
 
@@ -2473,6 +2539,24 @@ function ViewerView({ onBack }) {
         </Draggable>
       ))}
     </div>
+
+    {editMode && selectedId && isBpTextEl(selectedId) && layout[selectedId]?.visible && (() => {
+      const el = layout[selectedId];
+      const w = el.w;
+      const autoSize = selectedId === 'title' ? titleFs
+        : selectedId === 'bans_lbl' ? bansLblFs
+        : (selectedId === 't1_name' || selectedId === 't2_name') ? Math.max(14, Math.min(44, (w || 260) / 8))
+        : Math.max(12, Math.min(28, (w || 140) / 6));
+      const autoColor = selectedId === 'title' ? '#ffffff'
+        : selectedId === 'bans_lbl' ? 'rgba(255,255,255,0.5)'
+        : selectedId === 't1_name' ? state.team1.color
+        : selectedId === 't2_name' ? state.team2.color
+        : '#ffffff';
+      return (
+        <StageStylePanel label={bpElLabel(selectedId)} el={el} autoSize={autoSize} autoColor={autoColor}
+          onPatch={p => setElStyle(selectedId, p)} onClose={() => setSelectedId(null)} />
+      );
+    })()}
     </div>
   );
 }
@@ -2573,9 +2657,9 @@ const DEFAULT_LAYOUT = {
   champion:{ x: 83, y: 44, w: 200, visible: true },
 };
 
-function TeamSlot({ name, score, isWin, isLose, showScore, width }) {
+function TeamSlot({ name, score, isWin, isLose, showScore, width, fontSize, color }) {
   const w = width || 250;
-  const fs = Math.max(13, Math.min(20, w / 13));
+  const fs = fontSize ?? Math.max(13, Math.min(20, w / 13));
   return (
     <div style={{
       width: '100%', display: 'flex', alignItems: 'center', gap: 10,
@@ -2583,7 +2667,7 @@ function TeamSlot({ name, score, isWin, isLose, showScore, width }) {
     }}>
       <span style={{
         fontWeight: 800, fontSize: fs, flex: 1,
-        color: isLose ? 'rgba(255,255,255,0.5)' : '#fff',
+        color: color || (isLose ? 'rgba(255,255,255,0.5)' : '#fff'),
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         textShadow: '0 2px 8px rgba(0,0,0,0.8)',
@@ -2592,7 +2676,7 @@ function TeamSlot({ name, score, isWin, isLose, showScore, width }) {
       {showScore && (
         <span style={{
           fontWeight: 900, fontSize: fs + 2, flexShrink: 0,
-          color: isLose ? 'rgba(255,255,255,0.5)' : '#fff',
+          color: color || (isLose ? 'rgba(255,255,255,0.5)' : '#fff'),
           textShadow: '0 2px 8px rgba(0,0,0,0.8)',
         }}>{score ?? 0}</span>
       )}
@@ -2600,9 +2684,9 @@ function TeamSlot({ name, score, isWin, isLose, showScore, width }) {
   );
 }
 
-function ChampionBadge({ name, width }) {
+function ChampionBadge({ name, width, fontSize, color }) {
   const w = width || 200;
-  const fs = Math.max(14, Math.min(24, w / 9));
+  const fs = fontSize ?? Math.max(14, Math.min(24, w / 9));
   if (!name) return (
     <div style={{ width: '100%', color: 'rgba(255,255,255,0.2)', fontWeight: 900, fontSize: fs, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>—</div>
   );
@@ -2610,7 +2694,7 @@ function ChampionBadge({ name, width }) {
     <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}>
       <span style={{ fontSize: fs * 1.4, lineHeight: 1, flexShrink: 0 }}>🏆</span>
       <span style={{
-        fontWeight: 900, fontSize: fs, color: '#fff',
+        fontWeight: 900, fontSize: fs, color: color || '#fff',
         textShadow: '0 2px 12px rgba(0,0,0,0.9)',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>{name}</span>
@@ -2618,10 +2702,24 @@ function ChampionBadge({ name, width }) {
   );
 }
 
+// 對戰表畫面可調大小/顏色的文字元素
+function isBracketTextEl(id) {
+  return id === 'title' || id === 'champion' || /^(qf|sf)\d_[01]$/.test(id) || /^fin_[01]$/.test(id);
+}
+function bracketElLabel(id) {
+  if (id === 'title') return '標題';
+  if (id === 'champion') return '冠軍';
+  let m = id.match(/^qf(\d)_([01])$/); if (m) return `八強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}`;
+  m = id.match(/^sf(\d)_([01])$/); if (m) return `四強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}`;
+  m = id.match(/^fin_([01])$/); if (m) return `冠軍賽 ${m[1] === '0' ? '上' : '下'}`;
+  return id;
+}
+
 function BracketViewer({ onBack }) {
   const [state] = useBracket();
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
   const [editMode, setEditMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const draggingRef = useRef(null);
   const resizingRef = useRef(null);
   const dragOffRef  = useRef({ x: 0, y: 0 });
@@ -2629,6 +2727,7 @@ function BracketViewer({ onBack }) {
   const layoutRef = useRef(layout);
   const containerRef = useRef(null);
   useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
 
   const { teams, qf, sf, final, title, background } = state;
 
@@ -2678,6 +2777,7 @@ function BracketViewer({ onBack }) {
       : (el.x / 100) * rect.width;
     dragOffRef.current = { x: cx - rect.left - elLeft, y: cy - rect.top - (el.y / 100) * rect.height };
     draggingRef.current = key;
+    setSelectedId(key);
   }
   function startResize(e, key) {
     e.preventDefault(); e.stopPropagation();
@@ -2712,6 +2812,13 @@ function BracketViewer({ onBack }) {
   function hideEl(key) {
     const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
     setLayout(l); saveLayout(l);
+    setSelectedId(s => (s === key ? null : s));
+  }
+  function setElStyle(key, patch) {
+    const cur = { ...layoutRef.current[key] };
+    Object.entries(patch).forEach(([k, v]) => { if (v == null || v === '') delete cur[k]; else cur[k] = v; });
+    const l = { ...layoutRef.current, [key]: cur };
+    setLayout(l); saveLayout(l);
   }
   function resetLayout() { setLayout(DEFAULT_LAYOUT); saveLayout(DEFAULT_LAYOUT); }
 
@@ -2724,7 +2831,7 @@ function BracketViewer({ onBack }) {
           position: 'absolute', left, top: `${el.y}%`, width: el.w,
           cursor: editMode ? 'grab' : 'default',
           userSelect: 'none', zIndex: 10,
-          outline: editMode ? '1.5px dashed rgba(250,204,21,0.55)' : 'none',
+          outline: editMode ? (id === selectedId ? '2px solid #38bdf8' : '1.5px dashed rgba(250,204,21,0.55)') : 'none',
           borderRadius: 10,
         }}>
         {children}
@@ -2779,18 +2886,25 @@ function BracketViewer({ onBack }) {
         </button>
       </div>
 
-      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
       <Draggable id="title">
-        <h1 style={{ fontSize: Math.max(18, Math.min(54, (layout.title?.w||520)/10)), fontWeight: 900, textAlign: 'center', letterSpacing: '-0.02em', background: 'linear-gradient(90deg,#facc15,#fb923c)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, padding: '2px 0', whiteSpace: 'nowrap' }}>{title || '8 強對戰表'}</h1>
+        <h1 style={{
+          fontSize: elFontSize(layout.title, Math.max(18, Math.min(54, (layout.title?.w||520)/10))),
+          fontWeight: 900, textAlign: 'center', letterSpacing: '-0.02em',
+          ...(layout.title?.color
+            ? { color: layout.title.color, WebkitTextFillColor: layout.title.color }
+            : { background: 'linear-gradient(90deg,#facc15,#fb923c)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }),
+          margin: 0, padding: '2px 0', whiteSpace: 'nowrap',
+        }}>{title || '8 強對戰表'}</h1>
       </Draggable>
 
       {qf.map((m, mi) => {
         const w = m.winner ?? autoW(m.s1, m.s2);
         const showScore = (m.s1 != null && m.s1 > 0) || (m.s2 != null && m.s2 > 0);
         return [
-          <Draggable key={`qf${mi}_0`} id={`qf${mi}_0`}><TeamSlot name={teams[m.t1]} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`qf${mi}_0`]?.w} /></Draggable>,
-          <Draggable key={`qf${mi}_1`} id={`qf${mi}_1`}><TeamSlot name={teams[m.t2]} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`qf${mi}_1`]?.w} /></Draggable>,
+          <Draggable key={`qf${mi}_0`} id={`qf${mi}_0`}><TeamSlot name={teams[m.t1]} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`qf${mi}_0`]?.w} fontSize={layout[`qf${mi}_0`]?.fontSize} color={layout[`qf${mi}_0`]?.color} /></Draggable>,
+          <Draggable key={`qf${mi}_1`} id={`qf${mi}_1`}><TeamSlot name={teams[m.t2]} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`qf${mi}_1`]?.w} fontSize={layout[`qf${mi}_1`]?.fontSize} color={layout[`qf${mi}_1`]?.color} /></Draggable>,
         ];
       })}
 
@@ -2799,16 +2913,29 @@ function BracketViewer({ onBack }) {
         const tA = qfW(mi*2), tB = qfW(mi*2+1);
         const showScore = (m.s1 != null && m.s1 > 0) || (m.s2 != null && m.s2 > 0);
         return [
-          <Draggable key={`sf${mi}_0`} id={`sf${mi}_0`}><TeamSlot name={tA} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`sf${mi}_0`]?.w} /></Draggable>,
-          <Draggable key={`sf${mi}_1`} id={`sf${mi}_1`}><TeamSlot name={tB} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`sf${mi}_1`]?.w} /></Draggable>,
+          <Draggable key={`sf${mi}_0`} id={`sf${mi}_0`}><TeamSlot name={tA} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`sf${mi}_0`]?.w} fontSize={layout[`sf${mi}_0`]?.fontSize} color={layout[`sf${mi}_0`]?.color} /></Draggable>,
+          <Draggable key={`sf${mi}_1`} id={`sf${mi}_1`}><TeamSlot name={tB} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`sf${mi}_1`]?.w} fontSize={layout[`sf${mi}_1`]?.fontSize} color={layout[`sf${mi}_1`]?.color} /></Draggable>,
         ];
       })}
 
-      <Draggable id="fin_0"><TeamSlot name={fin0} score={final?.s1} isWin={finalW===0} isLose={finalW===1} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_0?.w} /></Draggable>
-      <Draggable id="fin_1"><TeamSlot name={fin1} score={final?.s2} isWin={finalW===1} isLose={finalW===0} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_1?.w} /></Draggable>
+      <Draggable id="fin_0"><TeamSlot name={fin0} score={final?.s1} isWin={finalW===0} isLose={finalW===1} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_0?.w} fontSize={layout.fin_0?.fontSize} color={layout.fin_0?.color} /></Draggable>
+      <Draggable id="fin_1"><TeamSlot name={fin1} score={final?.s2} isWin={finalW===1} isLose={finalW===0} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_1?.w} fontSize={layout.fin_1?.fontSize} color={layout.fin_1?.color} /></Draggable>
 
-      <Draggable id="champion"><ChampionBadge name={champion} width={layout.champion?.w} /></Draggable>
+      <Draggable id="champion"><ChampionBadge name={champion} width={layout.champion?.w} fontSize={layout.champion?.fontSize} color={layout.champion?.color} /></Draggable>
     </div>
+
+    {editMode && selectedId && isBracketTextEl(selectedId) && layout[selectedId]?.visible && (() => {
+      const el = layout[selectedId];
+      const w = el.w;
+      const autoSize = selectedId === 'title' ? Math.max(18, Math.min(54, (w || 520) / 10))
+        : selectedId === 'champion' ? Math.max(14, Math.min(24, (w || 200) / 9))
+        : Math.max(13, Math.min(20, (w || 250) / 13));
+      const autoColor = selectedId === 'title' ? '#facc15' : '#ffffff';
+      return (
+        <StageStylePanel label={bracketElLabel(selectedId)} el={el} autoSize={autoSize} autoColor={autoColor}
+          onPatch={p => setElStyle(selectedId, p)} onClose={() => setSelectedId(null)} />
+      );
+    })()}
     </div>
   );
 }
@@ -3265,10 +3392,17 @@ function ScoreboardOperator({ onBack }) {
   );
 }
 
+// 記分板畫面可調大小/顏色的文字元素
+function isSbTextEl(id) { return ['label', 't1_name', 't2_name', 't1_wins', 't2_wins'].includes(id); }
+function sbElLabel(id) {
+  return { label: '輪次標籤', t1_name: '左隊名稱', t2_name: '右隊名稱', t1_wins: '左隊勝場', t2_wins: '右隊勝場' }[id] || id;
+}
+
 function ScoreboardViewer({ onBack }) {
   const [state] = useScoreboard();
   const [layout, setLayout] = useState(DEFAULT_SB_LAYOUT);
   const [editMode, setEditMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const draggingRef    = useRef(null);
   const resizingRef    = useRef(null);
   const dragOffRef     = useRef({ x: 0, y: 0 });
@@ -3276,6 +3410,7 @@ function ScoreboardViewer({ onBack }) {
   const layoutRef      = useRef(layout);
   const containerRef   = useRef(null);
   useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
 
   const { team1, team2, background, roundLabel, winColor, maxWins = 3, games } = state;
   const { w1, w2 } = calcWins(games);
@@ -3305,6 +3440,7 @@ function ScoreboardViewer({ onBack }) {
     const el = layoutRef.current[key];
     dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
     draggingRef.current = key;
+    setSelectedId(key);
   }
   function startResize(e, key) {
     e.preventDefault(); e.stopPropagation();
@@ -3332,14 +3468,20 @@ function ScoreboardViewer({ onBack }) {
     if (draggingRef.current || resizingRef.current) saveLayout(layoutRef.current);
     draggingRef.current = null; resizingRef.current = null;
   }
-  function hideEl(key) { const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } }; setLayout(l); saveLayout(l); }
+  function hideEl(key) { const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } }; setLayout(l); saveLayout(l); setSelectedId(s => (s === key ? null : s)); }
+  function setElStyle(key, patch) {
+    const cur = { ...layoutRef.current[key] };
+    Object.entries(patch).forEach(([k, v]) => { if (v == null || v === '') delete cur[k]; else cur[k] = v; });
+    const l = { ...layoutRef.current, [key]: cur };
+    setLayout(l); saveLayout(l);
+  }
   function resetLayout() { setLayout(DEFAULT_SB_LAYOUT); saveLayout(DEFAULT_SB_LAYOUT); }
 
   function Draggable({ id, children }) {
     const el = layout[id]; if (!el?.visible) return null;
     return (
       <div onMouseDown={e => startDrag(e, id)} onTouchStart={e => startDrag(e, id)}
-        style={{ position:'absolute', left:`${el.x}%`, top:`${el.y}%`, width:el.w, cursor:editMode?'grab':'default', userSelect:'none', zIndex:10, outline:editMode?'1.5px dashed rgba(250,204,21,0.55)':'none', borderRadius:6 }}>
+        style={{ position:'absolute', left:`${el.x}%`, top:`${el.y}%`, width:el.w, cursor:editMode?'grab':'default', userSelect:'none', zIndex:10, outline:editMode?(id===selectedId?'2px solid #38bdf8':'1.5px dashed rgba(250,204,21,0.55)'):'none', borderRadius:6 }}>
         {children}
         {editMode && (<>
           <button onMouseDown={e => { e.stopPropagation(); hideEl(id); }} style={{ position:'absolute',top:-9,right:-9,zIndex:200,width:20,height:20,borderRadius:'50%',background:'#ef4444',border:'2px solid #fff',color:'#fff',fontWeight:900,fontSize:11,cursor:'pointer',lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center' }}>✕</button>
@@ -3366,10 +3508,10 @@ function ScoreboardViewer({ onBack }) {
         {editMode && <button onClick={resetLayout} style={{ background:'rgba(239,68,68,0.85)',color:'#fff',border:'none',padding:'4px 12px',borderRadius:7,fontSize:12,fontWeight:700,cursor:'pointer' }}>重置位置</button>}
         <button onClick={() => setEditMode(v => !v)} className={editMode ? '' : 'kurage-floating-control'} style={{ background:editMode?'#facc15':'rgba(0,0,0,0.45)',color:editMode?'#1e293b':'#fff',border:editMode?'none':'1px solid rgba(255,255,255,0.2)',padding:'4px 14px',borderRadius:7,fontSize:12,fontWeight:900,cursor:'pointer',opacity:editMode?1:0,transition:'opacity 0.3s' }} onMouseEnter={e=>{ if(!editMode) e.target.style.opacity=1; }} onMouseLeave={e=>{ if(!editMode) e.target.style.opacity=0; }}>{editMode?'✓ 完成':'✥ 編輯'}</button>
       </div>
-      {editMode && <div style={{ position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',background:'rgba(250,204,21,0.9)',color:'#1e293b',padding:'5px 18px',borderRadius:18,fontSize:11,fontWeight:900,zIndex:300,pointerEvents:'none',whiteSpace:'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+      {editMode && <div style={{ position:'absolute',bottom:10,left:'50%',transform:'translateX(-50%)',background:'rgba(250,204,21,0.9)',color:'#1e293b',padding:'5px 18px',borderRadius:18,fontSize:11,fontWeight:900,zIndex:300,pointerEvents:'none',whiteSpace:'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
       <Draggable id="label">
-        <div style={{ fontWeight:900, fontSize:fs(layout.label?.w||170,7,18,44), color:'rgba(255,255,255,0.9)' }}>{roundLabel||'八強'}</div>
+        <div style={{ fontWeight:900, fontSize:elFontSize(layout.label, fs(layout.label?.w||170,7,18,44)), color:elColor(layout.label, 'rgba(255,255,255,0.9)') }}>{roundLabel||'八強'}</div>
       </Draggable>
 
       {visGames.map((g, i) => (
@@ -3399,7 +3541,7 @@ function ScoreboardViewer({ onBack }) {
 
       <Draggable id="t1_name">
         <div>
-          <div style={{ fontWeight:900, fontSize:fs(layout.t1_name?.w||220,10,14,36), color:'#fff', lineHeight:1.2 }}>{team1?.name||'Team 1'}</div>
+          <div style={{ fontWeight:900, fontSize:elFontSize(layout.t1_name, fs(layout.t1_name?.w||220,10,14,36)), color:elColor(layout.t1_name, '#fff'), lineHeight:1.2 }}>{team1?.name||'Team 1'}</div>
           {team1?.players && <div style={{ fontSize:fs(layout.t1_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team1.players}</div>}
         </div>
       </Draggable>
@@ -3423,12 +3565,12 @@ function ScoreboardViewer({ onBack }) {
       })}
 
       <Draggable id="t1_wins">
-        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t1_wins?.w||100,1.5,36,110), color:winColor||'#ec4899' }}>{w1}</div>
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:elFontSize(layout.t1_wins, fs(layout.t1_wins?.w||100,1.5,36,110)), color:elColor(layout.t1_wins, winColor||'#ec4899') }}>{w1}</div>
       </Draggable>
 
       <Draggable id="t2_name">
         <div>
-          <div style={{ fontWeight:900, fontSize:fs(layout.t2_name?.w||220,10,14,36), color:'#fff', lineHeight:1.2 }}>{team2?.name||'Team 2'}</div>
+          <div style={{ fontWeight:900, fontSize:elFontSize(layout.t2_name, fs(layout.t2_name?.w||220,10,14,36)), color:elColor(layout.t2_name, '#fff'), lineHeight:1.2 }}>{team2?.name||'Team 2'}</div>
           {team2?.players && <div style={{ fontSize:fs(layout.t2_name?.w||220,16,10,20), color:textDim, marginTop:3 }}>{team2.players}</div>}
         </div>
       </Draggable>
@@ -3452,9 +3594,24 @@ function ScoreboardViewer({ onBack }) {
       })}
 
       <Draggable id="t2_wins">
-        <div style={{ textAlign:'center', fontWeight:900, fontSize:fs(layout.t2_wins?.w||100,1.5,36,110), color:winColor||'#ec4899' }}>{w2}</div>
+        <div style={{ textAlign:'center', fontWeight:900, fontSize:elFontSize(layout.t2_wins, fs(layout.t2_wins?.w||100,1.5,36,110)), color:elColor(layout.t2_wins, winColor||'#ec4899') }}>{w2}</div>
       </Draggable>
     </div>
+
+    {editMode && selectedId && isSbTextEl(selectedId) && layout[selectedId]?.visible && (() => {
+      const el = layout[selectedId];
+      const w = el.w;
+      const autoSize = selectedId === 'label' ? fs(w||170,7,18,44)
+        : (selectedId === 't1_name' || selectedId === 't2_name') ? fs(w||220,10,14,36)
+        : fs(w||100,1.5,36,110);
+      const autoColor = selectedId === 'label' ? 'rgba(255,255,255,0.9)'
+        : (selectedId === 't1_name' || selectedId === 't2_name') ? '#ffffff'
+        : (winColor || '#ec4899');
+      return (
+        <StageStylePanel label={sbElLabel(selectedId)} el={el} autoSize={autoSize} autoColor={autoColor}
+          onPatch={p => setElStyle(selectedId, p)} onClose={() => setSelectedId(null)} />
+      );
+    })()}
     </div>
   );
 }
@@ -5370,50 +5527,25 @@ function MatchStatsViewer({ onBack }) {
     </div>
 
     {/* 選取文字後的「大小 / 顏色」浮動面板（固定大小，不隨舞台縮放） */}
-    {editMode && selectedId && isMsTextEl(selectedId) && layout[selectedId]?.visible && (() => {
-      const el = layout[selectedId];
-      const curSize = Math.round(el.fontSize ?? msDerivedFont(selectedId, el.w));
-      const effColor = el.color
-        || (selectedId === 'title' ? colors.title
-          : selectedId.endsWith('_label') ? colors.label
-          : selectedId.endsWith('_name') ? colors.name
-          : selectedId.endsWith('_kills') ? (colors.kills || (selectedId.startsWith('t1') ? t1color : t2color))
-          : selectedId.endsWith('_deaths') ? colors.deaths
-          : selectedId.endsWith('_dps') ? colors.dps
-          : selectedId.endsWith('_ping') ? colors.ping
-          : '#ffffff');
-      const pickerColor = (effColor && effColor.startsWith('#')) ? effColor : '#ffffff';
-      return (
-        <div style={{
-          position: 'fixed', top: 58, left: 14, zIndex: 400, width: 240,
-          background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 12,
-          padding: '12px 14px', boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
-          fontFamily: 'sans-serif', border: '1px solid rgba(255,255,255,0.12)',
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>✎ {msElLabel(selectedId)}</span>
-            <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
-          </div>
-          <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
-            <span>文字大小</span><span style={{ fontWeight: 700 }}>{curSize}px</span>
-          </div>
-          <input type="range" min="8" max="160" value={curSize}
-            onChange={e => setElStyle(selectedId, { fontSize: Number(e.target.value) })}
-            style={{ width: '100%', accentColor: '#facc15' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: 11, opacity: 0.75 }}>顏色</span>
-            <input type="color" value={pickerColor}
-              onChange={e => setElStyle(selectedId, { color: e.target.value })}
-              style={{ width: 34, height: 28, padding: 0, border: 'none', borderRadius: 6, cursor: 'pointer', background: 'transparent' }} />
-            <input type="text" value={el.color || ''} placeholder="自動"
-              onChange={e => setElStyle(selectedId, { color: e.target.value })}
-              style={{ width: 88, fontSize: 11, padding: '5px 7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
-          </div>
-          <button onClick={() => setElStyle(selectedId, { fontSize: null, color: null })}
-            style={{ marginTop: 12, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復自動大小/顏色</button>
-        </div>
-      );
-    })()}
+    {editMode && selectedId && isMsTextEl(selectedId) && layout[selectedId]?.visible && (
+      <StageStylePanel
+        label={msElLabel(selectedId)}
+        el={layout[selectedId]}
+        autoSize={msDerivedFont(selectedId, layout[selectedId].w)}
+        autoColor={layout[selectedId].color
+          || (selectedId === 'title' ? colors.title
+            : selectedId.endsWith('_label') ? colors.label
+            : selectedId.endsWith('_name') ? colors.name
+            : selectedId.endsWith('_kills') ? (colors.kills || (selectedId.startsWith('t1') ? t1color : t2color))
+            : selectedId.endsWith('_deaths') ? colors.deaths
+            : selectedId.endsWith('_dps') ? colors.dps
+            : selectedId.endsWith('_ping') ? colors.ping
+            : '#ffffff')}
+        sizeMax={160}
+        onPatch={p => setElStyle(selectedId, p)}
+        onClose={() => setSelectedId(null)}
+      />
+    )}
     </div>
   );
 }
@@ -5708,10 +5840,17 @@ function BrawlerPickerModal({ onSelect, onClose }) {
 }
 
 // ── 展示畫面（OBS 用，背景透明） ─────────────────────────────────────────────
+// 即時比分畫面可調大小/顏色的文字元素
+function isLiveTextEl(id) { return ['t1_name', 't2_name', 't1_score', 't2_score'].includes(id); }
+function liveElLabel(id) {
+  return { t1_name: '左隊名稱', t2_name: '右隊名稱', t1_score: '左隊分數', t2_score: '右隊分數' }[id] || id;
+}
+
 function LiveScoreViewer({ onBack }) {
   const [state] = useLiveScore();
   const [layout, setLayout] = useState(LIVE_LAYOUT_DEFAULT);
   const [editMode, setEditMode] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const draggingRef = useRef(null);
   const resizingRef = useRef(null);
   const dragOffRef  = useRef({ x: 0, y: 0 });
@@ -5720,6 +5859,7 @@ function LiveScoreViewer({ onBack }) {
   const containerRef = useRef(null);
   const { scale: stageScale, h: stageH } = useStageScale();
   useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
 
   const { team1, team2, maxWins = 3, bgColor, blueColor, redColor, textColor, scoreTextColor, visible } = state;
 
@@ -5764,6 +5904,7 @@ function LiveScoreViewer({ onBack }) {
     const el = layoutRef.current[key];
     dragOffRef.current = { x: cx - rect.left - (el.x / 100) * rect.width, y: cy - rect.top - (el.y / 100) * rect.height };
     draggingRef.current = key;
+    setSelectedId(key);
   }
   function startResize(e, key) {
     e.preventDefault(); e.stopPropagation();
@@ -5795,6 +5936,13 @@ function LiveScoreViewer({ onBack }) {
   function hideEl(key) {
     const l = { ...layoutRef.current, [key]: { ...layoutRef.current[key], visible: false } };
     setLayout(l); saveLayout(l);
+    setSelectedId(s => (s === key ? null : s));
+  }
+  function setElStyle(key, patch) {
+    const cur = { ...layoutRef.current[key] };
+    Object.entries(patch).forEach(([k, v]) => { if (v == null || v === '') delete cur[k]; else cur[k] = v; });
+    const l = { ...layoutRef.current, [key]: cur };
+    setLayout(l); saveLayout(l);
   }
   function resetLayout() { setLayout(LIVE_LAYOUT_DEFAULT); saveLayout(LIVE_LAYOUT_DEFAULT); }
   function showAll() {
@@ -5810,7 +5958,7 @@ function LiveScoreViewer({ onBack }) {
         style={{
           position:'absolute', left:`${el.x}%`, top:`${el.y}%`, width:el.w,
           cursor: editMode ? 'grab' : 'default', userSelect:'none', zIndex:10,
-          outline: editMode ? '1.5px dashed rgba(250,204,21,0.6)' : 'none',
+          outline: editMode ? (id === selectedId ? '2px solid #38bdf8' : '1.5px dashed rgba(250,204,21,0.6)') : 'none',
           borderRadius: 6,
         }}>
         {children}
@@ -5880,7 +6028,7 @@ function LiveScoreViewer({ onBack }) {
           background:'rgba(250,204,21,0.9)', color:'#1e293b',
           padding:'5px 18px', borderRadius:18, fontSize:11, fontWeight:900,
           zIndex:300, pointerEvents:'none', whiteSpace:'nowrap',
-        }}>拖曳移動 ｜ 右下角縮放 ｜ ✕ 隱藏 ｜「重置位置」「顯示全部」</div>
+        }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「重置位置」「顯示全部」</div>
       )}
 
       <Draggable id="t1_name">
@@ -5889,8 +6037,8 @@ function LiveScoreViewer({ onBack }) {
           textAlign:'right',
         }}>
           <span style={{
-            fontWeight:900, fontSize:fs(layout.t1_name?.w||220, 9, 14, 36),
-            color: textColor || '#1e293b',
+            fontWeight:900, fontSize:elFontSize(layout.t1_name, fs(layout.t1_name?.w||220, 9, 14, 36)),
+            color: elColor(layout.t1_name, textColor || '#1e293b'),
             letterSpacing:'0.04em', textTransform:'uppercase', whiteSpace:'nowrap',
             textShadow:'0 2px 8px rgba(0,0,0,0.6)',
           }}>{team1?.name || 'TEAM 1'}</span>
@@ -5901,9 +6049,9 @@ function LiveScoreViewer({ onBack }) {
         <div style={{
           padding: `${fs(layout.t1_score?.w||70, 5, 10, 28)}px 0`,
           textAlign:'center',
-          fontWeight:900, fontSize:fs(layout.t1_score?.w||70, 1.8, 28, 100),
+          fontWeight:900, fontSize:elFontSize(layout.t1_score, fs(layout.t1_score?.w||70, 1.8, 28, 100)),
           fontVariantNumeric:'tabular-nums', lineHeight:1,
-          color: blueColor,
+          color: elColor(layout.t1_score, blueColor),
           textShadow:'0 2px 12px rgba(0,0,0,0.7)',
         }}>{s1}</div>
       </Draggable>
@@ -5944,9 +6092,9 @@ function LiveScoreViewer({ onBack }) {
         <div style={{
           padding: `${fs(layout.t2_score?.w||70, 5, 10, 28)}px 0`,
           textAlign:'center',
-          fontWeight:900, fontSize:fs(layout.t2_score?.w||70, 1.8, 28, 100),
+          fontWeight:900, fontSize:elFontSize(layout.t2_score, fs(layout.t2_score?.w||70, 1.8, 28, 100)),
           fontVariantNumeric:'tabular-nums', lineHeight:1,
-          color: redColor,
+          color: elColor(layout.t2_score, redColor),
           textShadow:'0 2px 12px rgba(0,0,0,0.7)',
         }}>{s2}</div>
       </Draggable>
@@ -5957,8 +6105,8 @@ function LiveScoreViewer({ onBack }) {
           textAlign:'left',
         }}>
           <span style={{
-            fontWeight:900, fontSize:fs(layout.t2_name?.w||220, 9, 14, 36),
-            color: textColor || '#1e293b',
+            fontWeight:900, fontSize:elFontSize(layout.t2_name, fs(layout.t2_name?.w||220, 9, 14, 36)),
+            color: elColor(layout.t2_name, textColor || '#1e293b'),
             letterSpacing:'0.04em', textTransform:'uppercase', whiteSpace:'nowrap',
             textShadow:'0 2px 8px rgba(0,0,0,0.6)',
           }}>{team2?.name || 'TEAM 2'}</span>
@@ -6066,6 +6214,19 @@ function LiveScoreViewer({ onBack }) {
         </div>
       </Draggable>
     </div>
+
+    {editMode && selectedId && isLiveTextEl(selectedId) && layout[selectedId]?.visible && (() => {
+      const el = layout[selectedId];
+      const w = el.w;
+      const isName = selectedId === 't1_name' || selectedId === 't2_name';
+      const autoSize = isName ? fs(w||220, 9, 14, 36) : fs(w||70, 1.8, 28, 100);
+      const autoColor = isName ? (textColor || '#1e293b')
+        : selectedId === 't1_score' ? blueColor : redColor;
+      return (
+        <StageStylePanel label={liveElLabel(selectedId)} el={el} autoSize={autoSize} autoColor={autoColor}
+          onPatch={p => setElStyle(selectedId, p)} onClose={() => setSelectedId(null)} />
+      );
+    })()}
     </div>
   );
 }
