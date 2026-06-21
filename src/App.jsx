@@ -1089,6 +1089,31 @@ function getPortrait(brawler) {
   return `/portraits/${id}_portrait.png`;
 }
 
+// 把多人房 Firestore draft 映射成觀眾視角 brawl_bp_match_current 的形狀
+// 藍→team1、紅→team2；只覆寫各槽位的 brawler，保留 base 的標題/背景/隊名/選手名
+function draftToViewerState(draft, base) {
+  const b = base || DEFAULT_STATE;
+  const mapBrawler = (x) => x ? { id: x.id, name: x.name, imageUrl: getPortrait(x) } : null;
+  const mapTeam = (baseTeam, side, srcBans, srcPicks) => ({
+    name:  baseTeam?.name,
+    color: baseTeam?.color,
+    bans:  [0, 1, 2].map(i => ({
+      id: baseTeam?.bans?.[i]?.id ?? `${side}_b${i + 1}`,
+      brawler: mapBrawler(srcBans[i]),
+    })),
+    picks: [0, 1, 2].map(i => ({
+      id: baseTeam?.picks?.[i]?.id ?? `${side}_p${i + 1}`,
+      player: baseTeam?.picks?.[i]?.player ?? `${side}${i + 1}`,
+      brawler: mapBrawler(srcPicks[i]),
+    })),
+  });
+  return {
+    ...b,                                   // 保留 matchTitle / background
+    team1: mapTeam(b.team1, 't1', draft.bans?.blue || [], draft.picks?.blue || []),
+    team2: mapTeam(b.team2, 't2', draft.bans?.red  || [], draft.picks?.red  || []),
+  };
+}
+
 function UltraLegendarySparkle() {
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -1244,6 +1269,8 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const [resetGate, setResetGate] = useState(false);
   const [coinStage, setCoinStage] = useState('spinning');
   const draftStateRef = useRef(null);
+  const viewerBaseRef = useRef(DEFAULT_STATE);   // 觀眾視角現有設定（標題/背景/隊名/選手名）
+  const lastMirrorRef = useRef('');              // 去重：上次鏡像寫入的內容
   const idleTimerRef = useRef(null);
   const banAudioRef  = useRef(null);
   const pickAudioRef = useRef(null);
@@ -1315,6 +1342,28 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   }, [phase]);
 
   useEffect(() => { draftStateRef.current = draftState; }, [draftState]);
+
+  // ── 保留觀眾視角現有設定（標題/背景/隊名/選手名），鏡像時只覆寫 brawler ──
+  useEffect(() => {
+    const r = ref(realtimeDb, 'brawl_bp_match_current');
+    const unsub = onValue(r, snap => { if (snap.exists()) viewerBaseRef.current = snap.val(); });
+    return () => unsub();
+  }, []);
+
+  // ── 即時鏡像：把多人房 draft 結果同步到 OBS 觀眾視角（brawl_bp_match_current）──
+  useEffect(() => {
+    if (!draftState) return;
+    // 單一寫入者選舉：避免多名觀眾/雙方同時重複寫；藍方在則藍方寫，否則紅方寫
+    const p = draftState.players || {};
+    const isWriter = myRole === 'blue' || (myRole === 'red' && !p.blue);
+    if (!isWriter) return;
+
+    const next = draftToViewerState(draftState, viewerBaseRef.current);
+    const json = JSON.stringify(next);
+    if (json === lastMirrorRef.current) return;   // 去重，避免無謂寫入
+    lastMirrorRef.current = json;
+    set(ref(realtimeDb, 'brawl_bp_match_current'), next).catch(() => {});
+  }, [draftState, myRole]);
 
   useEffect(() => {
     if (myRole !== 'blue' && myRole !== 'red') {
