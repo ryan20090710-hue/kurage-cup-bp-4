@@ -1015,8 +1015,19 @@ function makePickSequence(firstTeam) {
   ];
 }
 
+// 全局 ban 順序（整個 BO5 共用）：先手 ban1 → 後手 ban2 → 先手 ban1，共 4 隻、每隊 2 隻
+function makeGlobalBanSequence(firstTeam) {
+  const second = firstTeam === 'blue' ? 'red' : 'blue';
+  return [
+    { team: firstTeam, step: 1 },  // 先手第 1 隻
+    { team: second,    step: 1 },  // 後手第 1 隻
+    { team: second,    step: 2 },  // 後手第 2 隻
+    { team: firstTeam, step: 2 },  // 先手第 2 隻
+  ];
+}
+
 const INITIAL_DRAFT_STATE = {
-  phase: 'waiting',   // waiting → coinflip → ban → pick → done
+  phase: 'waiting',   // waiting → coinflip → globalban(僅第1場) → ban → pick → done
   ready: { blue: false, red: false },
   coinWinner: null,   // 'blue' | 'red'
   banDeadline: null,
@@ -1024,7 +1035,15 @@ const INITIAL_DRAFT_STATE = {
   picks: { blue: [], red: [] },
   pickStep: 0,
   turnDeadline: null,
-  players: { blue: null, red: null }
+  players: { blue: null, red: null },
+  // ── 全局 ban（整個 BO5 保留）──
+  globalBans: { blue: [], red: [] },
+  globalBanStep: 0,
+  globalBanDeadline: null,
+  // ── BO5 系列 ──
+  gameNumber: 1,                 // 1..5
+  score: { blue: 0, red: 0 },    // 系列比分，先到 3 勝
+  seriesWinner: null,            // 'blue' | 'red' | null
 };
 
 const translations = {
@@ -1049,6 +1068,19 @@ const translations = {
     coinBlueWins: '🔵 藍方先手！',
     coinRedWins: '🔴 紅方先手！',
     coinflipStarting: '即將開始 BAN 階段...',
+    globalBanPhase: '🌐 全局禁用 (整個 BO5)',
+    globalBanBlue: '🌐 藍方 全局禁用',
+    globalBanRed: '🌐 紅方 全局禁用',
+    confirmGlobalBan: '確認全局禁用 (整個 BO5)',
+    globalBansTitle: '全局禁用 (整個 BO5)',
+    waitingGlobalBan: '對手全局禁用中...',
+    gameLabel: (n) => `第 ${n} 場 / 5`,
+    seriesScore: '系列比分',
+    blueWon: '🔵 藍方獲勝',
+    redWon: '🔴 紅方獲勝',
+    seriesOver: '系列賽結束',
+    recordResult: '記錄本場勝方',
+    newSeries: '全新系列 (清除全局禁用)',
   },
   en: {
     roomTitle: 'Draft Room', joinBlue: 'Join Blue', joinRed: 'Join Red',
@@ -1071,6 +1103,19 @@ const translations = {
     coinBlueWins: '🔵 Blue Picks First!',
     coinRedWins: '🔴 Red Picks First!',
     coinflipStarting: 'Starting Ban Phase...',
+    globalBanPhase: '🌐 Global Ban (whole BO5)',
+    globalBanBlue: '🌐 Blue Global Ban',
+    globalBanRed: '🌐 Red Global Ban',
+    confirmGlobalBan: 'Confirm Global Ban (whole BO5)',
+    globalBansTitle: 'Global Bans (whole BO5)',
+    waitingGlobalBan: 'Opponent global banning...',
+    gameLabel: (n) => `Game ${n} / 5`,
+    seriesScore: 'Series Score',
+    blueWon: '🔵 Blue Won',
+    redWon: '🔴 Red Won',
+    seriesOver: 'Series Over',
+    recordResult: 'Record game winner',
+    newSeries: 'New Series (clear global bans)',
   }
 };
 
@@ -1107,10 +1152,18 @@ function draftToViewerState(draft, base) {
       brawler: mapBrawler(srcPicks[i]),
     })),
   });
+  const mapGlobal = (side, src) => [0, 1].map(i => ({
+    id: `gb_${side}_${i}`,
+    brawler: mapBrawler(src[i]),
+  }));
   return {
     ...b,                                   // 保留 matchTitle / background
     team1: mapTeam(b.team1, 't1', draft.bans?.blue || [], draft.picks?.blue || []),
     team2: mapTeam(b.team2, 't2', draft.bans?.red  || [], draft.picks?.red  || []),
+    globalBans: {
+      team1: mapGlobal('t1', draft.globalBans?.blue || []),
+      team2: mapGlobal('t2', draft.globalBans?.red  || []),
+    },
   };
 }
 
@@ -1267,6 +1320,9 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const [timeLeft, setTimeLeft] = useState(null);
   const [banTimeLeft, setBanTimeLeft] = useState(null);
   const [resetGate, setResetGate] = useState(false);
+  const pendingGateActionRef = useRef(null);
+  // 開啟密碼鎖並記錄解鎖後要執行的動作（避免勝方按鈕誤觸發完全重置）
+  const requestGated = (action) => { pendingGateActionRef.current = action; setResetGate(true); };
   const [coinStage, setCoinStage] = useState('spinning');
   const draftStateRef = useRef(null);
   const viewerBaseRef = useRef(DEFAULT_STATE);   // 觀眾視角現有設定（標題/背景/隊名/選手名）
@@ -1302,12 +1358,26 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const bothSeated = !!(players.blue && players.red);
   const iAmReady = myRole !== 'spectator' && ready[myRole];
 
-  // 根據硬幣結果動態決定選角順序
+  // ── 全局 ban / BO5 衍生狀態 ──
+  const globalBans = draftState?.globalBans || { blue: [], red: [] };
+  const globalBanStep = draftState?.globalBanStep || 0;
+  const gameNumber = draftState?.gameNumber || 1;
+  const score = draftState?.score || { blue: 0, red: 0 };
+  const seriesWinner = draftState?.seriesWinner || null;
+
+  // 根據硬幣結果動態決定選角順序 / 全局 ban 順序
   const pickSequence = makePickSequence(coinWinner);
+  const globalBanSequence = makeGlobalBanSequence(coinWinner);
+  const currentGlobalBanTurn = globalBanSequence[globalBanStep];
 
   const currentStepInfo = isDone ? null
     : phase === 'waiting'  ? { type: 'waiting',  label: t.waitingPhase }
     : phase === 'coinflip' ? { type: 'coinflip', label: t.coinflipPhase }
+    : phase === 'globalban' ? {
+        ...currentGlobalBanTurn,
+        type: 'globalban',
+        label: currentGlobalBanTurn?.team === 'blue' ? t.globalBanBlue : t.globalBanRed,
+      }
     : phase === 'ban'      ? { type: 'ban',       label: t.phaseBan }
     : {
         ...pickSequence[pickStep],
@@ -1316,7 +1386,9 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
           : t.redPickLabel(pickSequence[pickStep].step),
       };
 
-  const isMyTurn = phase === 'ban'
+  const isMyTurn = phase === 'globalban'
+    ? (myRole !== 'spectator' && currentGlobalBanTurn?.team === myRole)
+    : phase === 'ban'
     ? (myRole !== 'spectator' && bans[myRole]?.length < 3)
     : (phase === 'pick' && currentStepInfo?.team === myRole);
 
@@ -1421,6 +1493,11 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
             bans:   { blue: [],    red: [],    ...(raw.bans   || {}) },
             picks:  { blue: [],    red: [],    ...(raw.picks  || {}) },
             players: { blue: null, red: null,  ...(raw.players || {}) },
+            globalBans: { blue: [], red: [], ...(raw.globalBans || {}) },
+            score:      { blue: 0,  red: 0,  ...(raw.score      || {}) },
+            globalBanStep: raw.globalBanStep ?? 0,
+            gameNumber:    raw.gameNumber ?? 1,
+            seriesWinner:  raw.seriesWinner ?? null,
           };
           setDraftState(data);
           if (data.players.blue === user.uid) setMyRole('blue');
@@ -1440,14 +1517,20 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
 
   const lockedBrawlers = useMemo(() => {
     if (!draftState) return [];
-    if (phase === 'ban') {
-      if (myRole === 'spectator') return [];
-      return bans[myRole].map(b => b.id);
-    } else {
-      const allIds = [...bans.blue, ...bans.red, ...picks.blue, ...picks.red].map(b => b?.id).filter(Boolean);
-      return [...new Set(allIds)];
+    // 全局 ban 在每個階段、每一場都不可選
+    const globals = [...globalBans.blue, ...globalBans.red].map(b => b?.id).filter(Boolean);
+    if (phase === 'globalban') {
+      // 公開依序：鎖兩隊已禁，防跨隊重複禁
+      return [...new Set(globals)];
     }
-  }, [phase, bans, picks, myRole, draftState]);
+    if (phase === 'ban') {
+      // 盲禁仍只鎖自己的，全局 ban 對所有人都灰掉
+      const own = myRole === 'spectator' ? [] : bans[myRole].map(b => b.id);
+      return [...new Set([...globals, ...own])];
+    }
+    const allIds = [...bans.blue, ...bans.red, ...picks.blue, ...picks.red].map(b => b?.id).filter(Boolean);
+    return [...new Set([...globals, ...allIds])];
+  }, [phase, bans, picks, globalBans, myRole, draftState]);
 
   const filteredBrawlers = useMemo(() =>
     BRAWLERS.filter(b => b.name.includes(searchTerm) || getBrawlerName(b, 'en').toLowerCase().includes(searchTerm.toLowerCase())),
@@ -1466,7 +1549,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
         const currentPickSeq = makePickSequence(currentCoinWinner);
         const currentIsMyTurn = currentDraft.phase === 'pick' && currentPickSeq[currentDraft.pickStep].team === myRole;
         if (currentIsMyTurn) {
-          const lockedIds = [...currentDraft.bans.blue, ...currentDraft.bans.red, ...currentDraft.picks.blue, ...currentDraft.picks.red].map(b => b?.id).filter(Boolean);
+          const lockedIds = [...currentDraft.bans.blue, ...currentDraft.bans.red, ...currentDraft.picks.blue, ...currentDraft.picks.red, ...(currentDraft.globalBans?.blue || []), ...(currentDraft.globalBans?.red || [])].map(b => b?.id).filter(Boolean);
           const available = BRAWLERS.filter(b => !lockedIds.includes(b.id));
           const randomBrawler = available[Math.floor(Math.random() * available.length)];
           const newMyPicks = [...currentDraft.picks[myRole], randomBrawler];
@@ -1494,10 +1577,16 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
     if (remaining <= 0) return;
     // 3.2秒後揭曉結果
     const t1 = setTimeout(() => setCoinStage('result'), 3200);
-    // deadline 後進入 ban 階段
+    // deadline 後進入下一階段：第 1 場且全局 ban 未完成 → globalban，否則直接 ban
     const t2 = setTimeout(async () => {
+      const cur = draftStateRef.current || {};
+      const needGlobal = (cur.gameNumber || 1) === 1 && (cur.globalBanStep || 0) < 4;
       const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
-      await updateDoc(roomRef, { phase: 'ban', banDeadline: Date.now() + 40000 });
+      if (needGlobal) {
+        await updateDoc(roomRef, { phase: 'globalban', globalBanDeadline: Date.now() + 40000 });
+      } else {
+        await updateDoc(roomRef, { phase: 'ban', banDeadline: Date.now() + 40000 });
+      }
     }, remaining);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [phase, draftState?.coinflipDeadline]);
@@ -1521,7 +1610,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
         let changed = false;
         for (const team of ['blue', 'red']) {
           while (newState.bans[team].length < 3) {
-            const lockedIds = [...newState.bans.blue, ...newState.bans.red].map(b => b?.id).filter(Boolean);
+            const lockedIds = [...newState.bans.blue, ...newState.bans.red, ...(newState.globalBans?.blue || []), ...(newState.globalBans?.red || [])].map(b => b?.id).filter(Boolean);
             const available = BRAWLERS.filter(b => !lockedIds.includes(b.id));
             const pick = available[Math.floor(Math.random() * available.length)];
             newState.bans[team] = [...newState.bans[team], pick];
@@ -1543,6 +1632,50 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
     }, 500);
     return () => clearInterval(interval);
   }, [phase, draftState?.banDeadline, isDone]);
+
+  // ── 全局 ban 每回合倒數計時（逾時自動為當前回合隊伍隨機禁用一隻）──
+  useEffect(() => {
+    const dl = draftState?.globalBanDeadline;
+    if (phase !== 'globalban' || !dl || isDone) { setBanTimeLeft(null); return; }
+
+    const interval = setInterval(async () => {
+      const remaining = Math.max(0, Math.ceil((dl - Date.now()) / 1000));
+      setBanTimeLeft(remaining);
+
+      if (remaining === 0) {
+        clearInterval(interval);
+        const cur = draftStateRef.current;
+        if (!cur || cur.phase !== 'globalban') return;
+        const seq = makeGlobalBanSequence(cur.coinWinner || 'blue');
+        const turn = seq[cur.globalBanStep];
+        if (!turn) return;
+
+        // 單一寫入者：輪到的座位玩家；該座位空則 blue→red 後備（比照 OBS 寫入者選舉）
+        const p = cur.players || {};
+        const amWriter = p[turn.team]
+          ? (myRole === turn.team)
+          : (myRole === 'blue' || (myRole === 'red' && !p.blue));
+        if (!amWriter) return;
+
+        const usedIds = [...cur.globalBans.blue, ...cur.globalBans.red].map(b => b?.id).filter(Boolean);
+        const available = BRAWLERS.filter(b => !usedIds.includes(b.id));
+        const pick = available[Math.floor(Math.random() * available.length)];
+        const team = turn.team;
+        const newTeamGlobals = [...cur.globalBans[team], pick];
+        const newStep = cur.globalBanStep + 1;
+        const done = newStep >= seq.length;
+        const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
+        await updateDoc(roomRef, {
+          [`globalBans.${team}`]: newTeamGlobals,
+          globalBanStep: newStep,
+          ...(done
+            ? { phase: 'ban', banDeadline: Date.now() + 40000, globalBanDeadline: null }
+            : { globalBanDeadline: Date.now() + 40000 }),
+        });
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [phase, draftState?.globalBanDeadline, isDone, myRole]);
 
   if (!draftState || !user) {
     return (
@@ -1592,7 +1725,23 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
     if (!selectedBrawler || isDone || !isMyTurn) return;
     const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
 
-    if (phase === 'ban') {
+    if (phase === 'globalban') {
+      if (currentGlobalBanTurn?.team !== myRole) return;
+      // 防跨隊/同隊重複禁
+      const alreadyBanned = [...globalBans.blue, ...globalBans.red].some(b => b?.id === selectedBrawler.id);
+      if (alreadyBanned) return;
+      const newTeamGlobals = [...globalBans[myRole], selectedBrawler];
+      const newStep = globalBanStep + 1;
+      const done = newStep >= globalBanSequence.length;
+      await updateDoc(roomRef, {
+        [`globalBans.${myRole}`]: newTeamGlobals,
+        globalBanStep: newStep,
+        ...(done
+          ? { phase: 'ban', banDeadline: Date.now() + 40000, globalBanDeadline: null }
+          : { globalBanDeadline: Date.now() + 40000 }),
+      });
+
+    } else if (phase === 'ban') {
       const newMyBans = [...bans[myRole], selectedBrawler];
       const otherBans = myRole === 'blue' ? bans.red : bans.blue;
       const allDone = newMyBans.length === 3 && otherBans.length === 3;
@@ -1618,6 +1767,32 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const handleReset = async () => {
     const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
     await setDoc(roomRef, INITIAL_DRAFT_STATE);
+    setSelectedBrawler(null); setSearchTerm('');
+  };
+
+  // ── 記錄本場勝方：加比分；3 勝結束系列，否則進下一場（保留全局 ban / 比分）──
+  const handleGameResult = async (winner) => {
+    if (!isDone || seriesWinner) return;
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
+    const newScore = { ...score, [winner]: (score[winner] || 0) + 1 };
+    if (newScore[winner] >= 3) {
+      await updateDoc(roomRef, { score: newScore, seriesWinner: winner });
+    } else {
+      await updateDoc(roomRef, {
+        score: newScore,
+        gameNumber: gameNumber + 1,
+        // 只重設單場欄位；保留 globalBans / globalBanStep / score / seriesWinner / players
+        phase: 'waiting',
+        ready: { blue: false, red: false },
+        coinWinner: null,
+        coinflipDeadline: null,
+        bans: { blue: [], red: [] },
+        picks: { blue: [], red: [] },
+        pickStep: 0,
+        banDeadline: null,
+        turnDeadline: null,
+      });
+    }
     setSelectedBrawler(null); setSearchTerm('');
   };
 
@@ -1663,19 +1838,38 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
         <h1 className="text-3xl md:text-5xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 mb-4 tracking-tighter drop-shadow-lg">
           BRAWL STARS DRAFT
         </h1>
+
+        {/* BO5 場次 + 系列比分 */}
+        <div className="flex items-center justify-center gap-3 md:gap-4 mb-4">
+          <span className="px-3 py-1 rounded-full text-xs md:text-sm font-black tracking-widest bg-slate-800 border border-slate-700 text-slate-200">
+            {t.gameLabel(gameNumber)}
+          </span>
+          <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-slate-900/70 border border-slate-700">
+            <span className={`font-black text-lg md:text-2xl ${seriesWinner === 'blue' ? 'text-blue-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'text-blue-400'}`}>{score.blue}</span>
+            <span className="text-slate-500 font-bold">–</span>
+            <span className={`font-black text-lg md:text-2xl ${seriesWinner === 'red' ? 'text-red-300 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'text-red-400'}`}>{score.red}</span>
+          </div>
+          {seriesWinner && (
+            <span className={`px-3 py-1 rounded-full text-xs md:text-sm font-black tracking-widest border ${seriesWinner === 'blue' ? 'bg-blue-900/40 border-blue-500/50 text-blue-300' : 'bg-red-900/40 border-red-500/50 text-red-300'}`}>
+              {t.seriesOver} · {seriesWinner === 'blue' ? '🔵' : '🔴'}
+            </span>
+          )}
+        </div>
+
         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
           <div className={`px-6 py-2 md:py-3 rounded-full font-black text-lg md:text-xl tracking-wider transition-all duration-500
             ${isDone ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
               : phase === 'waiting'  ? 'bg-gradient-to-r from-slate-600 to-slate-700 border border-slate-500/40'
               : phase === 'coinflip' ? 'bg-gradient-to-r from-yellow-500 to-amber-600 shadow-[0_0_25px_rgba(234,179,8,0.5)] border border-yellow-300/30'
+              : phase === 'globalban' ? 'bg-gradient-to-r from-teal-600 to-cyan-700 shadow-[0_0_25px_rgba(13,148,136,0.5)] border border-cyan-400/30'
               : phase === 'ban'      ? 'bg-gradient-to-r from-purple-700 to-indigo-800 shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-400/30'
               : currentStepInfo?.team === 'blue' ? 'bg-gradient-to-r from-blue-600 to-blue-800 shadow-[0_0_25px_rgba(37,99,235,0.6)] border border-blue-400/30'
               : 'bg-gradient-to-r from-red-600 to-red-800 shadow-[0_0_25px_rgba(220,38,38,0.6)] border border-red-400/30'}`}>
             {isDone ? t.phaseDone : currentStepInfo?.label}
           </div>
 
-          {/* Ban 階段倒數 */}
-          {phase === 'ban' && banTimeLeft !== null && (
+          {/* Ban / 全局 ban 階段倒數 */}
+          {(phase === 'ban' || phase === 'globalban') && banTimeLeft !== null && (
             <div className={`px-4 py-2 md:py-3 rounded-full font-black text-xl flex items-center gap-2 border-2 shadow-lg transition-colors
               ${banTimeLeft <= 10 ? 'bg-red-950/90 border-red-500 text-red-400 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-slate-900 border-purple-500 text-purple-300'}`}>
               <span>⏱</span>
@@ -1689,7 +1883,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
               <span>⏱</span><span className="font-mono">{timeLeft}s</span>
             </div>
           )}
-          <button onClick={() => { if (isTargetUnlocked('reset')) handleReset(); else setResetGate(true); }} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition-colors shadow-lg hover:rotate-180 duration-500 relative">
+          <button onClick={() => { if (isTargetUnlocked('reset')) handleReset(); else requestGated(handleReset); }} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition-colors shadow-lg hover:rotate-180 duration-500 relative">
             <RotateCcw size={22} />
             <Lock size={9} className="absolute top-1 right-1 text-yellow-400" />
           </button>
@@ -1700,8 +1894,8 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
       {resetGate && (
         <PasswordGate
           target="reset"
-          onSuccess={() => { setResetGate(false); handleReset(); }}
-          onCancel={() => setResetGate(false)}
+          onSuccess={() => { setResetGate(false); const a = pendingGateActionRef.current; pendingGateActionRef.current = null; if (a) a(); else handleReset(); }}
+          onCancel={() => { setResetGate(false); pendingGateActionRef.current = null; }}
           themeTokens={ui}
         />
       )}
@@ -1714,8 +1908,47 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
           lang={lang}
           t={t}
           coinWinner={coinWinner}
-          onReset={() => { if (isTargetUnlocked('reset')) handleReset(); else setResetGate(true); }}
+          gameNumber={gameNumber}
+          score={score}
+          seriesWinner={seriesWinner}
+          globalBans={globalBans}
+          onRecordWinner={(w) => { if (isTargetUnlocked('reset')) handleGameResult(w); else requestGated(() => handleGameResult(w)); }}
+          onReset={() => { if (isTargetUnlocked('reset')) handleReset(); else requestGated(handleReset); }}
         />
+      )}
+
+      {/* 全局禁用區塊（整個 BO5 保留）*/}
+      {(phase === 'globalban' || globalBans.blue.length + globalBans.red.length > 0) && (
+        <div className="flex justify-between items-center mb-4 bg-cyan-950/30 p-3 md:p-4 rounded-3xl border border-cyan-800/50 shadow-xl backdrop-blur-md">
+          <div className="flex flex-col items-start gap-2">
+            <span className="text-cyan-300 font-bold text-xs md:text-sm tracking-widest bg-cyan-900/30 px-3 py-1 rounded-full border border-cyan-800/50">🌐 {t.blueBan}</span>
+            <div className="flex gap-2 md:gap-3">
+              {[0, 1].map(i => (
+                <BanSlot key={i} brawler={globalBans.blue[i]} team="blue" lang={lang}
+                  isHidden={false}
+                  isCurrentTurn={phase === 'globalban' && currentGlobalBanTurn?.team === 'blue' && globalBans.blue.length === i}
+                  isPreview={phase === 'globalban' && myRole === 'blue' && currentGlobalBanTurn?.team === 'blue' && globalBans.blue.length === i && selectedBrawler !== null}
+                  selectedBrawler={selectedBrawler} />
+              ))}
+            </div>
+          </div>
+          <div className="hidden md:flex flex-col items-center text-cyan-600 font-black tracking-[0.25em] text-sm mx-2 text-center">
+            <span className="text-base">🌐</span>
+            <span className="text-[10px] leading-tight mt-1">{t.globalBansTitle}</span>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <span className="text-cyan-300 font-bold text-xs md:text-sm tracking-widest bg-cyan-900/30 px-3 py-1 rounded-full border border-cyan-800/50">🌐 {t.redBan}</span>
+            <div className="flex gap-2 md:gap-3">
+              {[0, 1].map(i => (
+                <BanSlot key={i} brawler={globalBans.red[i]} team="red" lang={lang}
+                  isHidden={false}
+                  isCurrentTurn={phase === 'globalban' && currentGlobalBanTurn?.team === 'red' && globalBans.red.length === i}
+                  isPreview={phase === 'globalban' && myRole === 'red' && currentGlobalBanTurn?.team === 'red' && globalBans.red.length === i && selectedBrawler !== null}
+                  selectedBrawler={selectedBrawler} />
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 禁用區塊 */}
@@ -1824,7 +2057,9 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
               <div className="bg-slate-900/90 border border-slate-700 px-8 py-5 rounded-2xl shadow-2xl flex flex-col items-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4"></div>
                 <span className="font-bold text-xl text-white tracking-widest text-center">
-                  {phase === 'ban'
+                  {phase === 'globalban'
+                    ? (currentGlobalBanTurn?.team === 'blue' ? t.globalBanBlue : t.globalBanRed)
+                    : phase === 'ban'
                     ? (myRole === 'spectator' ? t.waitingBanSpectator : t.waitingBanPlayer)
                     : (myRole === 'spectator' ? t.spectating : (currentStepInfo?.team === 'blue' ? t.waitingBlue : t.waitingRed))}
                 </span>
@@ -1874,9 +2109,10 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
             className={`mt-5 w-full py-4 lg:py-5 rounded-2xl font-black text-xl lg:text-2xl transition-all shadow-xl z-10 relative
               ${isDone || !isMyTurn || phase === 'waiting' ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
               : !selectedBrawler ? 'bg-slate-800/80 text-slate-400 cursor-not-allowed border border-slate-700'
+              : phase === 'globalban' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white hover:scale-[1.02] shadow-[0_0_20px_rgba(13,148,136,0.4)]'
               : phase === 'ban' ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white hover:scale-[1.02] shadow-[0_0_20px_rgba(225,29,72,0.4)]'
               : 'bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 hover:scale-[1.02] shadow-[0_0_20px_rgba(250,204,21,0.4)]'}`}>
-            {isDone ? t.allDone : myRole === 'spectator' ? t.spectatorCannot : !isMyTurn ? t.waitOpponent : !selectedBrawler ? t.selectBrawler : (phase === 'ban' ? t.confirmBan : t.confirmPick)}
+            {isDone ? t.allDone : myRole === 'spectator' ? t.spectatorCannot : !isMyTurn ? t.waitOpponent : !selectedBrawler ? t.selectBrawler : (phase === 'globalban' ? t.confirmGlobalBan : phase === 'ban' ? t.confirmBan : t.confirmPick)}
           </button>
         </div>
 
@@ -1893,7 +2129,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   );
 }
 
-function BPResultsOverlay({ picks, bans, lang, t, coinWinner, onReset }) {
+function BPResultsOverlay({ picks, bans, lang, t, coinWinner, gameNumber = 1, score = { blue: 0, red: 0 }, seriesWinner = null, globalBans = { blue: [], red: [] }, onRecordWinner, onReset }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 300);
@@ -1941,6 +2177,23 @@ function BPResultsOverlay({ picks, bans, lang, t, coinWinner, onReset }) {
                 : (lang === 'zh' ? '🔴 紅方先手' : '🔴 Red Picked First')}
             </p>
           </div>
+
+          {/* 全局禁用列（整個 BO5）*/}
+          {globalBans.blue.length + globalBans.red.length > 0 && (
+            <div className="result-slide-1 flex items-center justify-center gap-3 mb-4 bg-cyan-950/30 rounded-2xl p-3 border border-cyan-800/50">
+              <span className="text-cyan-300 text-xs font-black tracking-widest uppercase">🌐 {t.globalBansTitle}</span>
+              <div className="flex gap-2">
+                {[...globalBans.blue, ...globalBans.red].map((b, i) => (
+                  <div key={i} className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-cyan-800/60 bg-slate-800 grayscale relative">
+                    {b && <img src={getPortrait(b)} alt={getBrawlerName(b, lang)} className="w-full h-full object-cover object-top" />}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-full h-[3px] bg-red-600 rotate-45 shadow-[0_0_6px_rgba(0,0,0,0.9)]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 禁用列 */}
           <div className="result-slide-1 flex items-center justify-between mb-6 bg-slate-900/60 rounded-2xl p-4 border border-slate-800">
@@ -2018,12 +2271,42 @@ function BPResultsOverlay({ picks, bans, lang, t, coinWinner, onReset }) {
             </div>
           </div>
 
-          {/* 重置按鈕 */}
-          <div className="result-slide-3 flex justify-center">
+          {/* BO5 場次 / 比分 + 記錄勝方 + 重置 */}
+          <div className="result-slide-3 flex flex-col items-center gap-4">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 rounded-full text-xs font-black tracking-widest bg-slate-800 border border-slate-700 text-slate-200">{t.gameLabel(gameNumber)}</span>
+              <span className="px-4 py-1 rounded-full bg-slate-900/70 border border-slate-700 font-black text-lg">
+                <span className="text-blue-400">{score.blue}</span>
+                <span className="text-slate-500"> – </span>
+                <span className="text-red-400">{score.red}</span>
+              </span>
+            </div>
+
+            {seriesWinner ? (
+              <div className={`px-6 py-3 rounded-2xl font-black text-xl tracking-widest border ${seriesWinner === 'blue' ? 'bg-blue-900/40 border-blue-500/50 text-blue-200' : 'bg-red-900/40 border-red-500/50 text-red-200'}`}>
+                {t.seriesOver} · {seriesWinner === 'blue' ? (lang === 'zh' ? '🔵 藍方奪冠' : '🔵 Blue Wins') : (lang === 'zh' ? '🔴 紅方奪冠' : '🔴 Red Wins')} ({score.blue}–{score.red})
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-slate-400 text-xs font-bold tracking-widest uppercase flex items-center gap-1">{t.recordResult} <Lock size={11} className="text-yellow-400" /></span>
+                <div className="flex gap-3">
+                  <button onClick={() => onRecordWinner && onRecordWinner('blue')}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-black rounded-2xl hover:scale-105 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+                    {t.blueWon}
+                  </button>
+                  <button onClick={() => onRecordWinner && onRecordWinner('red')}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white font-black rounded-2xl hover:scale-105 transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)]">
+                    {t.redWon}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button onClick={onReset}
-              className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 font-black text-lg rounded-2xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(250,204,21,0.4)]">
-              <RotateCcw size={20} />
-              {lang === 'zh' ? '重新開始 BP' : 'New Draft'}
+              className="flex items-center gap-3 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-sm rounded-2xl hover:scale-105 transition-all border border-slate-700 relative">
+              <RotateCcw size={18} />
+              {t.newSeries}
+              <Lock size={11} className="absolute top-1 right-1 text-yellow-400" />
             </button>
           </div>
         </div>
@@ -2046,6 +2329,11 @@ const DEFAULT_STATE = {
     name: 'Team 2', color: '#ef4444',
     bans: [{ id: 't2_b1', brawler: null }, { id: 't2_b2', brawler: null }, { id: 't2_b3', brawler: null }],
     picks: [{ id: 't2_p1', player: 'red1', brawler: null }, { id: 't2_p2', player: 'red2', brawler: null }, { id: 't2_p3', player: 'red3', brawler: null }],
+  },
+  // 全局禁用（整個 BO5）：每隊 2 隻
+  globalBans: {
+    team1: [{ id: 'gb_t1_0', brawler: null }, { id: 'gb_t1_1', brawler: null }],
+    team2: [{ id: 'gb_t2_0', brawler: null }, { id: 'gb_t2_1', brawler: null }],
   },
 };
 
@@ -2408,6 +2696,11 @@ function ViewerPickSlot({ pick, size }) {
 
 const DEFAULT_BP_LAYOUT = {
   title:    { x: 50, y:  4, w: 600, visible: true, anchor: 'center' },
+  gbans_lbl: { x: 50, y: 21, w: 200, visible: true, anchor: 'center' },
+  t1_gb0: { x: 40,   y: 24, w: 58, visible: true },
+  t1_gb1: { x: 45.5, y: 24, w: 58, visible: true },
+  t2_gb0: { x: 52,   y: 24, w: 58, visible: true },
+  t2_gb1: { x: 57.5, y: 24, w: 58, visible: true },
   bans_lbl: { x: 50, y: 16, w: 180, visible: true, anchor: 'center' },
   t1_b0: { x: 22, y: 14, w: 75, visible: true },
   t1_b1: { x: 28, y: 14, w: 75, visible: true },
@@ -2433,11 +2726,12 @@ const DEFAULT_BP_LAYOUT = {
 
 // BP 畫面可調大小/顏色的文字元素
 function isBpTextEl(id) {
-  return id === 'title' || id === 'bans_lbl' || id === 't1_name' || id === 't2_name' || /^t[12]_pn\d$/.test(id);
+  return id === 'title' || id === 'bans_lbl' || id === 'gbans_lbl' || id === 't1_name' || id === 't2_name' || /^t[12]_pn\d$/.test(id);
 }
 function bpElLabel(id) {
   if (id === 'title') return '標題';
   if (id === 'bans_lbl') return 'BANS 標籤';
+  if (id === 'gbans_lbl') return 'GLOBAL BANS 標籤';
   if (id === 't1_name') return '藍隊名稱';
   if (id === 't2_name') return '紅隊名稱';
   const m = id.match(/^t([12])_pn(\d)$/);
@@ -2567,6 +2861,9 @@ function ViewerView({ onBack }) {
 
   const titleFs = Math.max(20, Math.min(60, (layout.title?.w || 600) / 10));
   const bansLblFs = Math.max(14, Math.min(36, (layout.bans_lbl?.w || 180) / 6));
+  const gbansLblFs = Math.max(12, Math.min(32, (layout.gbans_lbl?.w || 200) / 7));
+  const gb1 = state.globalBans?.team1 || [];
+  const gb2 = state.globalBans?.team2 || [];
   const { scale: stageScale, h: stageH } = useStageScale(state.background);
 
   return (
@@ -2617,6 +2914,21 @@ function ViewerView({ onBack }) {
         </Draggable>
       ))}
 
+      {/* 全局禁用（整個 BO5）*/}
+      <Draggable id="gbans_lbl">
+        <div style={{ fontSize: elFontSize(layout.gbans_lbl, gbansLblFs), fontWeight: 900, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.gbans_lbl, 'rgba(255,255,255,0.5)'), ...textEffectStyle(layout.gbans_lbl, '2px 2px 4px rgba(0,0,0,0.4)') }}>GLOBAL BANS</div>
+      </Draggable>
+      {gb1.map((ban, i) => (
+        <Draggable key={`t1_gb${i}`} id={`t1_gb${i}`}>
+          <ViewerBanSlot ban={ban} size={layout[`t1_gb${i}`]?.w} />
+        </Draggable>
+      ))}
+      {gb2.map((ban, i) => (
+        <Draggable key={`t2_gb${i}`} id={`t2_gb${i}`}>
+          <ViewerBanSlot ban={ban} size={layout[`t2_gb${i}`]?.w} />
+        </Draggable>
+      ))}
+
       <Draggable id="t1_name">
         <h2 style={{ fontSize: elFontSize(layout.t1_name, Math.max(14, Math.min(44, (layout.t1_name?.w || 260) / 8))), fontWeight: 900, letterSpacing: '0.08em', textAlign: 'center', color: elColor(layout.t1_name, state.team1.color), ...textEffectStyle(layout.t1_name, '2px 2px 4px rgba(0,0,0,0.6)'), margin: 0, padding: 0, wordBreak: 'break-word' }}>{state.team1.name}</h2>
       </Draggable>
@@ -2652,10 +2964,12 @@ function ViewerView({ onBack }) {
       const w = el.w;
       const autoSize = selectedId === 'title' ? titleFs
         : selectedId === 'bans_lbl' ? bansLblFs
+        : selectedId === 'gbans_lbl' ? gbansLblFs
         : (selectedId === 't1_name' || selectedId === 't2_name') ? Math.max(14, Math.min(44, (w || 260) / 8))
         : Math.max(12, Math.min(28, (w || 140) / 6));
       const autoColor = selectedId === 'title' ? '#ffffff'
         : selectedId === 'bans_lbl' ? 'rgba(255,255,255,0.5)'
+        : selectedId === 'gbans_lbl' ? 'rgba(255,255,255,0.5)'
         : selectedId === 't1_name' ? state.team1.color
         : selectedId === 't2_name' ? state.team2.color
         : '#ffffff';
