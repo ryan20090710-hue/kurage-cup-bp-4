@@ -1545,19 +1545,29 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
       if (remaining === 0) {
         clearInterval(interval);
         const currentDraft = draftStateRef.current;
+        if (!currentDraft || currentDraft.phase !== 'pick') return;
         const currentCoinWinner = currentDraft.coinWinner || 'blue';
         const currentPickSeq = makePickSequence(currentCoinWinner);
-        const currentIsMyTurn = currentDraft.phase === 'pick' && currentPickSeq[currentDraft.pickStep].team === myRole;
-        if (currentIsMyTurn) {
+        const turn = currentPickSeq[currentDraft.pickStep];
+        if (!turn) return;
+
+        // 單一寫入者：輪到的座位玩家；該座位空則 blue→red 後備（比照 globalban / OBS 寫入者選舉）
+        // 沒有後備時，被踢出/離開的隊伍輪到會讓 pick 永久卡住。
+        const p = currentDraft.players || {};
+        const amWriter = p[turn.team]
+          ? (myRole === turn.team)
+          : (myRole === 'blue' || (myRole === 'red' && !p.blue));
+        if (amWriter) {
+          const team = turn.team;
           const lockedIds = [...currentDraft.bans.blue, ...currentDraft.bans.red, ...currentDraft.picks.blue, ...currentDraft.picks.red, ...(currentDraft.globalBans?.blue || []), ...(currentDraft.globalBans?.red || [])].map(b => b?.id).filter(Boolean);
           const available = BRAWLERS.filter(b => !lockedIds.includes(b.id));
           const randomBrawler = available[Math.floor(Math.random() * available.length)];
-          const newMyPicks = [...currentDraft.picks[myRole], randomBrawler];
+          const newTeamPicks = [...currentDraft.picks[team], randomBrawler];
           const newPickStep = currentDraft.pickStep + 1;
           const done = newPickStep >= currentPickSeq.length;
           const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
           await updateDoc(roomRef, {
-            [`picks.${myRole}`]: newMyPicks,
+            [`picks.${team}`]: newTeamPicks,
             pickStep: newPickStep,
             ...(done ? { phase: 'done', turnDeadline: null } : { turnDeadline: Date.now() + 40000 }),
           });
@@ -1632,6 +1642,25 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
     }, 500);
     return () => clearInterval(interval);
   }, [phase, draftState?.banDeadline, isDone]);
+
+  // ── 盲禁救援：雙方都已禁滿 3 隻但階段卡在 ban，補推進到 pick ──
+  // handleConfirm 只在「按下第 3 個 ban 當下、且已看到對手也 3 個」才切換階段，
+  // 雙方幾乎同時禁完時可能都判定 allDone=false → 沒人寫入 phase:'pick' 而卡死。
+  // 這裡以實際狀態為準補救，單一寫入者選舉避免雙方重複寫。
+  useEffect(() => {
+    if (phase !== 'ban' || isDone) return;
+    if (bans.blue.length < 3 || bans.red.length < 3) return;
+    const p = draftState?.players || {};
+    const amWriter = myRole === 'blue' || (myRole === 'red' && !p.blue);
+    if (!amWriter) return;
+    const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
+    updateDoc(roomRef, {
+      phase: 'pick',
+      pickStep: 0,
+      turnDeadline: Date.now() + 40000,
+      banDeadline: null,
+    }).catch(() => {});
+  }, [phase, bans, isDone, myRole, draftState]);
 
   // ── 全局 ban 每回合倒數計時（逾時自動為當前回合隊伍隨機禁用一隻）──
   useEffect(() => {
