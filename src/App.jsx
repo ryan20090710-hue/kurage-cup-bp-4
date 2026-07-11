@@ -2701,8 +2701,9 @@ function StageStylePanel({ label, el, autoSize, autoColor, sizeMin = 8, sizeMax 
 
 function ViewerBanSlot({ ban, size }) {
   const s = size || 75;
+  const h = s * 1602 / 2400;
   return (
-    <div style={{ width: s, height: s, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden' }}>
       {ban.brawler ? (
         <>
           <img src={ban.brawler.imageUrl} alt={ban.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(1)', opacity: 0.9, display: 'block' }} />
@@ -2715,8 +2716,9 @@ function ViewerBanSlot({ ban, size }) {
 
 function ViewerPickSlot({ pick, size }) {
   const s = size || 120;
+  const h = s * 1602 / 2400;
   return (
-    <div style={{ width: s, height: s, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden' }}>
       {pick.brawler ? (
         <img src={pick.brawler.imageUrl} alt={pick.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       ) : null}
