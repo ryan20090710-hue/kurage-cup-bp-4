@@ -2775,7 +2775,36 @@ function bpElLabel(id) {
 }
 
 function ViewerView({ onBack }) {
-  const [state] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
+  const [rtState] = useFirebaseState('brawl_bp_match_current', DEFAULT_STATE);
+
+  // ── BP 即時同步：觀眾端直接訂閱 Firestore 房間 ──
+  // 舊做法依賴玩家分頁把 draft 鏡像寫進 RTDB，玩家分頁關閉/手機切背景時觀眾畫面會凍結。
+  // 這裡改為觀眾自己收 onSnapshot 推送，在本地合成畫面，不經過任何中轉分頁。
+  const [draft, setDraft] = useState(null);
+  useEffect(() => {
+    let unsubSnap = null;
+    signInAnonymously(auth).catch((err) => console.error('Viewer auth error:', err));
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      if (!u || unsubSnap) return;
+      const roomRef = doc(firestoreDb, 'artifacts', appId, 'public', 'data', 'draft_rooms', 'global_draft');
+      unsubSnap = onSnapshot(
+        roomRef,
+        (snap) => setDraft(snap.exists() ? snap.data() : null),
+        (err) => console.error('Viewer draft listen error:', err),
+      );
+    });
+    return () => { unsubAuth(); if (unsubSnap) unsubSnap(); };
+  }, []);
+
+  // 系列賽進行中（含局間等待）→ 以房間即時狀態為準；房間重置後 → 回退到操作者手動內容
+  const seriesLive = !!draft && (
+    draft.phase !== 'waiting' ||
+    (draft.globalBans?.blue?.length || 0) + (draft.globalBans?.red?.length || 0) > 0 ||
+    (draft.score?.blue || 0) + (draft.score?.red || 0) > 0 ||
+    (draft.gameNumber || 1) > 1
+  );
+  const state = seriesLive ? draftToViewerState(draft, rtState) : rtState;
+
   const [layout, setLayout] = useState(DEFAULT_BP_LAYOUT);
   const [editMode, setEditMode] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
