@@ -2751,6 +2751,32 @@ function CardBorderPanel({ style, onPatch, onClose }) {
   );
 }
 
+// 地圖框浮動編輯面板：貼上圖片連結（存於 layout.map.src）
+function MapPanel({ el, onPatch, onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', top: 58, left: 14, zIndex: 400, width: 250,
+      background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 12,
+      padding: '12px 14px', boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
+      fontFamily: 'sans-serif', border: '1px solid rgba(255,255,255,0.12)',
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>✎ 地圖框</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 5 }}>圖片連結</div>
+      <input type="text" value={el.src || ''} placeholder="https://..."
+        onChange={e => onPatch({ src: e.target.value })}
+        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
+      <div style={{ fontSize: 10.5, opacity: 0.55, marginTop: 6, lineHeight: 1.5 }}>拖曳移動、右下角縮放（維持 180×279 比例）。邊框樣式與角色圖卡共用。</div>
+      {el.src && (
+        <button onClick={() => onPatch({ src: null })}
+          style={{ marginTop: 12, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>✕ 清除圖片</button>
+      )}
+    </div>
+  );
+}
+
 // 圖卡黑框覆蓋層：疊在圖片最上方，不縮圖、不受灰階濾鏡影響
 function CardBorderOverlay({ border }) {
   if (!border || !(border.width > 0)) return null;
@@ -2816,9 +2842,14 @@ const DEFAULT_BP_LAYOUT = {
   t2_p0: { x: 74, y: 44, w: 120, visible: true },
   t2_p1: { x: 74, y: 64, w: 120, visible: true },
   t2_p2: { x: 74, y: 84, w: 120, visible: true },
+  // 中央地圖框（180×279，維持比例；縮放時高度隨寬度等比變化）
+  map: { x: 50, y: 37, w: 180, visible: true, anchor: 'center' },
   // 保留鍵：所有圖卡共用的邊框設定（非可拖曳元素）
   card_style: { borderWidth: 4, borderColor: '#000000', radius: 10 },
 };
+
+// 地圖框原始尺寸（用來鎖定長寬比）
+const BP_MAP_RATIO = 279 / 180;
 
 // BP 畫面可調大小/顏色的文字元素
 function isBpTextEl(id) {
@@ -3029,6 +3060,15 @@ function ViewerView({ onBack }) {
         <h1 style={{ fontSize: elFontSize(layout.title, titleFs), fontWeight: 800, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.title, '#fff'), ...textEffectStyle(layout.title, '2px 2px 4px rgba(0,0,0,0.4)'), margin: 0, padding: 0, whiteSpace: 'nowrap' }}>{state.matchTitle}</h1>
       </Draggable>
 
+      {/* 中央地圖框（180×279，縮放時等比例）*/}
+      <Draggable id="map">
+        <div style={{ width: '100%', height: (layout.map?.w || 180) * BP_MAP_RATIO, borderRadius: cardBorder.radius, border: `${cardBorder.width}px solid ${cardBorder.color}`, overflow: 'hidden', background: 'rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.35)' }}>
+          {layout.map?.src
+            ? <img src={layout.map.src} alt="map" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 900, letterSpacing: '0.25em', fontSize: 18 }}>地圖</span>}
+        </div>
+      </Draggable>
+
       <Draggable id="bans_lbl">
         <div style={{ fontSize: elFontSize(layout.bans_lbl, bansLblFs), fontWeight: 900, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.bans_lbl, 'rgba(255,255,255,0.5)'), ...textEffectStyle(layout.bans_lbl, '2px 2px 4px rgba(0,0,0,0.4)') }}>BANS</div>
       </Draggable>
@@ -3112,6 +3152,11 @@ function ViewerView({ onBack }) {
     {editMode && selectedId && isBpCardEl(selectedId) && layout[selectedId]?.visible && (
       <CardBorderPanel style={layout.card_style}
         onPatch={p => setElStyle('card_style', p)} onClose={() => setSelectedId(null)} />
+    )}
+
+    {editMode && selectedId === 'map' && layout.map?.visible && (
+      <MapPanel el={layout.map}
+        onPatch={p => setElStyle('map', p)} onClose={() => setSelectedId(null)} />
     )}
     </div>
   );
