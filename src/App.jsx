@@ -1140,12 +1140,15 @@ function getPortrait(brawler) {
 function draftToViewerState(draft, base) {
   const b = base || DEFAULT_STATE;
   const mapBrawler = (x) => x ? { id: x.id, name: x.name, imageUrl: getPortrait(x) } : null;
+  // 盲選禁用：等雙方各 3 隻都 ban 完，才一次過在觀眾視角揭曉（避免逐隻洩漏）
+  const banRevealed =
+    (draft.bans?.blue?.length || 0) >= 3 && (draft.bans?.red?.length || 0) >= 3;
   const mapTeam = (baseTeam, side, srcBans, srcPicks) => ({
     name:  baseTeam?.name,
     color: baseTeam?.color,
     bans:  [0, 1, 2].map(i => ({
       id: baseTeam?.bans?.[i]?.id ?? `${side}_b${i + 1}`,
-      brawler: mapBrawler(srcBans[i]),
+      brawler: banRevealed ? mapBrawler(srcBans[i]) : null,
     })),
     picks: [0, 1, 2].map(i => ({
       id: baseTeam?.picks?.[i]?.id ?? `${side}_p${i + 1}`,
