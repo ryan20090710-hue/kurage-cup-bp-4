@@ -2702,7 +2702,49 @@ function StageStylePanel({ label, el, autoSize, autoColor, sizeMin = 8, sizeMax 
   );
 }
 
-function ViewerBanSlot({ ban, size }) {
+// 圖卡邊框浮動編輯面板：粗細 + 顏色，套用到所有圖卡（存於 layout.card_style）
+function CardBorderPanel({ style, onPatch, onClose }) {
+  const curW = Math.round(style?.borderWidth ?? 4);
+  const pickerColor = (style?.borderColor && style.borderColor.startsWith('#')) ? style.borderColor : '#000000';
+  return (
+    <div style={{
+      position: 'fixed', top: 58, left: 14, zIndex: 400, width: 240,
+      background: 'rgba(15,23,42,0.94)', color: '#fff', borderRadius: 12,
+      padding: '12px 14px', boxShadow: '0 12px 34px rgba(0,0,0,0.45)',
+      fontFamily: 'sans-serif', border: '1px solid rgba(255,255,255,0.12)',
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>✎ 圖卡邊框（套用全部圖卡）</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0 }}>✕</button>
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
+        <span>邊框粗細</span><span style={{ fontWeight: 700 }}>{curW === 0 ? '無框' : `${curW}px`}</span>
+      </div>
+      <input type="range" min={0} max={20} value={curW}
+        onChange={e => onPatch({ borderWidth: Number(e.target.value) })}
+        style={{ width: '100%', accentColor: '#facc15' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <span style={{ fontSize: 11, opacity: 0.75 }}>顏色</span>
+        <input type="color" value={pickerColor}
+          onChange={e => onPatch({ borderColor: e.target.value })}
+          style={{ width: 34, height: 28, padding: 0, border: 'none', borderRadius: 6, cursor: 'pointer', background: 'transparent' }} />
+        <input type="text" value={style?.borderColor || ''} placeholder="#000000"
+          onChange={e => onPatch({ borderColor: e.target.value })}
+          style={{ width: 88, fontSize: 11, padding: '5px 7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
+      </div>
+      <button onClick={() => onPatch({ borderWidth: null, borderColor: null })}
+        style={{ marginTop: 14, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復預設（4px 黑）</button>
+    </div>
+  );
+}
+
+// 圖卡黑框覆蓋層：疊在圖片最上方，不縮圖、不受灰階濾鏡影響
+function CardBorderOverlay({ border }) {
+  if (!border || !(border.width > 0)) return null;
+  return <div style={{ position: 'absolute', inset: 0, border: `${border.width}px solid ${border.color || '#000000'}`, pointerEvents: 'none' }} />;
+}
+
+function ViewerBanSlot({ ban, size, border }) {
   const s = size || 75;
   const h = s * 1602 / 2400;
   return (
@@ -2711,19 +2753,23 @@ function ViewerBanSlot({ ban, size }) {
         <>
           <img src={ban.brawler.imageUrl} alt={ban.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(1)', opacity: 0.9, display: 'block' }} />
           <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }} viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="5" y1="5" x2="95" y2="95" stroke="#d5281a" strokeWidth="10" strokeLinecap="round" /></svg>
+          <CardBorderOverlay border={border} />
         </>
       ) : null}
     </div>
   );
 }
 
-function ViewerPickSlot({ pick, size }) {
+function ViewerPickSlot({ pick, size, border }) {
   const s = size || 120;
   const h = s * 1602 / 2400;
   return (
     <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden' }}>
       {pick.brawler ? (
-        <img src={pick.brawler.imageUrl} alt={pick.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <>
+          <img src={pick.brawler.imageUrl} alt={pick.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <CardBorderOverlay border={border} />
+        </>
       ) : null}
     </div>
   );
@@ -2757,11 +2803,17 @@ const DEFAULT_BP_LAYOUT = {
   t2_p0: { x: 74, y: 44, w: 120, visible: true },
   t2_p1: { x: 74, y: 64, w: 120, visible: true },
   t2_p2: { x: 74, y: 84, w: 120, visible: true },
+  // 保留鍵：所有圖卡共用的邊框設定（非可拖曳元素）
+  card_style: { borderWidth: 4, borderColor: '#000000' },
 };
 
 // BP 畫面可調大小/顏色的文字元素
 function isBpTextEl(id) {
   return id === 'title' || id === 'bans_lbl' || id === 'gbans_lbl' || id === 't1_name' || id === 't2_name' || /^t[12]_pn\d$/.test(id);
+}
+// BP 畫面的角色圖卡元素（禁用卡 / 全局禁用卡 / 選角卡）
+function isBpCardEl(id) {
+  return /^t[12]_(b|gb|p)\d$/.test(id);
 }
 function bpElLabel(id) {
   if (id === 'title') return '標題';
@@ -2928,6 +2980,7 @@ function ViewerView({ onBack }) {
   const gbansLblFs = Math.max(12, Math.min(32, (layout.gbans_lbl?.w || 200) / 7));
   const gb1 = state.globalBans?.team1 || [];
   const gb2 = state.globalBans?.team2 || [];
+  const cardBorder = { width: layout.card_style?.borderWidth ?? 4, color: layout.card_style?.borderColor || '#000000' };
   const { scale: stageScale, h: stageH } = useStageScale(state.background);
 
   return (
@@ -2957,7 +3010,7 @@ function ViewerView({ onBack }) {
         </button>
       </div>
 
-      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
+      {editMode && <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(250,204,21,0.9)', color: '#1e293b', padding: '5px 18px', borderRadius: 18, fontSize: 11, fontWeight: 900, zIndex: 300, pointerEvents: 'none', whiteSpace: 'nowrap' }}>拖曳移動 ｜ 右下角縮放 ｜ 點文字改大小/顏色 ｜ 點圖卡調邊框 ｜ ✕ 隱藏 ｜「重置位置」還原</div>}
 
       <Draggable id="title">
         <h1 style={{ fontSize: elFontSize(layout.title, titleFs), fontWeight: 800, textAlign: 'center', letterSpacing: '0.2em', color: elColor(layout.title, '#fff'), ...textEffectStyle(layout.title, '2px 2px 4px rgba(0,0,0,0.4)'), margin: 0, padding: 0, whiteSpace: 'nowrap' }}>{state.matchTitle}</h1>
@@ -2969,12 +3022,12 @@ function ViewerView({ onBack }) {
 
       {state.team1.bans.map((ban, i) => (
         <Draggable key={`t1_b${i}`} id={`t1_b${i}`}>
-          <ViewerBanSlot ban={ban} size={layout[`t1_b${i}`]?.w} />
+          <ViewerBanSlot ban={ban} size={layout[`t1_b${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
       {state.team2.bans.map((ban, i) => (
         <Draggable key={`t2_b${i}`} id={`t2_b${i}`}>
-          <ViewerBanSlot ban={ban} size={layout[`t2_b${i}`]?.w} />
+          <ViewerBanSlot ban={ban} size={layout[`t2_b${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
 
@@ -2984,12 +3037,12 @@ function ViewerView({ onBack }) {
       </Draggable>
       {gb1.map((ban, i) => (
         <Draggable key={`t1_gb${i}`} id={`t1_gb${i}`}>
-          <ViewerBanSlot ban={ban} size={layout[`t1_gb${i}`]?.w} />
+          <ViewerBanSlot ban={ban} size={layout[`t1_gb${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
       {gb2.map((ban, i) => (
         <Draggable key={`t2_gb${i}`} id={`t2_gb${i}`}>
-          <ViewerBanSlot ban={ban} size={layout[`t2_gb${i}`]?.w} />
+          <ViewerBanSlot ban={ban} size={layout[`t2_gb${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
 
@@ -3013,12 +3066,12 @@ function ViewerView({ onBack }) {
 
       {state.team1.picks.map((pick, i) => (
         <Draggable key={`t1_p${i}`} id={`t1_p${i}`}>
-          <ViewerPickSlot pick={pick} size={layout[`t1_p${i}`]?.w} />
+          <ViewerPickSlot pick={pick} size={layout[`t1_p${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
       {state.team2.picks.map((pick, i) => (
         <Draggable key={`t2_p${i}`} id={`t2_p${i}`}>
-          <ViewerPickSlot pick={pick} size={layout[`t2_p${i}`]?.w} />
+          <ViewerPickSlot pick={pick} size={layout[`t2_p${i}`]?.w} border={cardBorder} />
         </Draggable>
       ))}
     </div>
@@ -3042,6 +3095,11 @@ function ViewerView({ onBack }) {
           onPatch={p => setElStyle(selectedId, p)} onClose={() => setSelectedId(null)} />
       );
     })()}
+
+    {editMode && selectedId && isBpCardEl(selectedId) && layout[selectedId]?.visible && (
+      <CardBorderPanel style={layout.card_style}
+        onPatch={p => setElStyle('card_style', p)} onClose={() => setSelectedId(null)} />
+    )}
     </div>
   );
 }
