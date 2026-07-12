@@ -3236,27 +3236,48 @@ function useBracket() {
   return [state, setSharedState];
 }
 
-
-
+const BRACKET_SLOT_DEFAULTS = [
+  ['qf0_0', 6, 17], ['qf0_1', 6, 25],
+  ['qf1_0', 6, 38], ['qf1_1', 6, 46],
+  ['qf2_0', 6, 59], ['qf2_1', 6, 67],
+  ['qf3_0', 6, 80], ['qf3_1', 6, 88],
+  ['sf0_0', 37, 24], ['sf0_1', 37, 32],
+  ['sf1_0', 37, 60], ['sf1_1', 37, 68],
+  ['fin_0', 65, 41], ['fin_1', 65, 49],
+];
+const BRACKET_SLOT_IDS = BRACKET_SLOT_DEFAULTS.map(([id]) => id);
 
 const DEFAULT_LAYOUT = {
   title:    { x: 50, y:  4, w: 520, visible: true, anchor: 'center' },
-  qf0_0:   { x:  6, y: 17, w: 250, visible: true },
-  qf0_1:   { x:  6, y: 25, w: 250, visible: true },
-  qf1_0:   { x:  6, y: 38, w: 250, visible: true },
-  qf1_1:   { x:  6, y: 46, w: 250, visible: true },
-  qf2_0:   { x:  6, y: 59, w: 250, visible: true },
-  qf2_1:   { x:  6, y: 67, w: 250, visible: true },
-  qf3_0:   { x:  6, y: 80, w: 250, visible: true },
-  qf3_1:   { x:  6, y: 88, w: 250, visible: true },
-  sf0_0:   { x: 37, y: 24, w: 250, visible: true },
-  sf0_1:   { x: 37, y: 32, w: 250, visible: true },
-  sf1_0:   { x: 37, y: 60, w: 250, visible: true },
-  sf1_1:   { x: 37, y: 68, w: 250, visible: true },
-  fin_0:   { x: 65, y: 41, w: 250, visible: true },
-  fin_1:   { x: 65, y: 49, w: 250, visible: true },
+  ...Object.fromEntries(BRACKET_SLOT_DEFAULTS.flatMap(([id, x, y]) => [
+    [`${id}_name`,  { x, y, w: 190, visible: true }],
+    [`${id}_score`, { x: x + 11.5, y, w: 50, visible: true }],
+  ])),
   champion:{ x: 83, y: 44, w: 200, visible: true },
 };
+
+// 舊版把隊名與比分存成同一個版面元素；讀取時拆開，保留原本位置並在右側建立比分位置。
+function normalizeBracketLayout(data) {
+  const layout = { ...DEFAULT_LAYOUT, ...(data || {}) };
+  BRACKET_SLOT_IDS.forEach(id => {
+    const legacy = data?.[id];
+    const nameKey = `${id}_name`;
+    const scoreKey = `${id}_score`;
+    if (legacy && data?.[nameKey] == null) {
+      const legacyW = legacy.w || 250;
+      layout[nameKey] = { ...legacy, w: Math.max(120, legacyW - 60) };
+      if (data?.[scoreKey] == null) {
+        layout[scoreKey] = {
+          ...DEFAULT_LAYOUT[scoreKey],
+          x: Math.min(96, ((legacy.x || 0) * STAGE_W / 100 + legacyW - 50 + 10) / STAGE_W * 100),
+          y: legacy.y ?? DEFAULT_LAYOUT[scoreKey].y,
+          color: legacy.color,
+        };
+      }
+    }
+  });
+  return layout;
+}
 
 function BracketTeamName({ name, isLose, fontSize, color, effectStyle }) {
   const fs = fontSize ?? 18;
@@ -3278,8 +3299,8 @@ function BracketTeamName({ name, isLose, fontSize, color, effectStyle }) {
 }
 
 function BracketScore({ score, showScore, fontSize, color, effectStyle, isLose }) {
-  if (!showScore) return null;
   const fs = fontSize ?? 20;
+  if (!showScore) return <div style={{ width: '100%', height: fs * 1.4, visibility: 'hidden' }} />;
   return (
     <div style={{ width: '100%', padding: `${fs * 0.2}px 0` }}>
       <span style={{
@@ -3345,7 +3366,7 @@ function BracketViewer({ onBack }) {
     const dbRef = ref(bracketDb, 'bracket_layout');
     const unsub = onValue(dbRef, snap => {
       const data = snap.val();
-      if (data) setLayout({ ...DEFAULT_LAYOUT, ...data });
+      if (data) setLayout(normalizeBracketLayout(data));
     });
     return () => unsub();
   }, []);
@@ -3466,6 +3487,25 @@ function BracketViewer({ onBack }) {
     );
   }
 
+  function renderBracketSlot(id, name, score, nameIsLose, scoreIsLose, showScore) {
+    const nameEl = layout[`${id}_name`];
+    const scoreEl = layout[`${id}_score`];
+    return [
+      <Draggable key={`${id}_name`} id={`${id}_name`}>
+        <BracketTeamName name={name} isLose={nameIsLose}
+          fontSize={elFontSize(nameEl, Math.max(13, Math.min(20, (nameEl?.w || 190) / 11)))}
+          color={nameEl?.color}
+          effectStyle={textEffectStyle(nameEl, '0 2px 8px rgba(0,0,0,0.8)')} />
+      </Draggable>,
+      <Draggable key={`${id}_score`} id={`${id}_score`}>
+        <BracketScore score={score} showScore={showScore} isLose={scoreIsLose}
+          fontSize={elFontSize(scoreEl, 20)}
+          color={scoreEl?.color}
+          effectStyle={textEffectStyle(scoreEl, '0 2px 8px rgba(0,0,0,0.8)')} />
+      </Draggable>,
+    ];
+  }
+
   const { scale: stageScale, h: stageH } = useStageScale(background);
 
   return (
@@ -3514,8 +3554,8 @@ function BracketViewer({ onBack }) {
         const w = m.winner ?? autoW(m.s1, m.s2);
         const showScore = (m.s1 != null && m.s1 > 0) || (m.s2 != null && m.s2 > 0);
         return [
-          <Draggable key={`qf${mi}_0`} id={`qf${mi}_0`}><TeamSlot name={teams[m.t1]} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`qf${mi}_0`]?.w} fontSize={layout[`qf${mi}_0`]?.fontSize} color={layout[`qf${mi}_0`]?.color} effectStyle={textEffectStyle(layout[`qf${mi}_0`], '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>,
-          <Draggable key={`qf${mi}_1`} id={`qf${mi}_1`}><TeamSlot name={teams[m.t2]} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`qf${mi}_1`]?.w} fontSize={layout[`qf${mi}_1`]?.fontSize} color={layout[`qf${mi}_1`]?.color} effectStyle={textEffectStyle(layout[`qf${mi}_1`], '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>,
+          ...renderBracketSlot(`qf${mi}_0`, teams[m.t1], m.s1, w === 1, w === 1, showScore),
+          ...renderBracketSlot(`qf${mi}_1`, teams[m.t2], m.s2, w === 0, w === 0, showScore),
         ];
       })}
 
@@ -3524,13 +3564,13 @@ function BracketViewer({ onBack }) {
         const tA = qfW(mi*2), tB = qfW(mi*2+1);
         const showScore = (m.s1 != null && m.s1 > 0) || (m.s2 != null && m.s2 > 0);
         return [
-          <Draggable key={`sf${mi}_0`} id={`sf${mi}_0`}><TeamSlot name={tA} score={m.s1} isWin={w===0} isLose={w===1} showScore={showScore} width={layout[`sf${mi}_0`]?.w} fontSize={layout[`sf${mi}_0`]?.fontSize} color={layout[`sf${mi}_0`]?.color} effectStyle={textEffectStyle(layout[`sf${mi}_0`], '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>,
-          <Draggable key={`sf${mi}_1`} id={`sf${mi}_1`}><TeamSlot name={tB} score={m.s2} isWin={w===1} isLose={w===0} showScore={showScore} width={layout[`sf${mi}_1`]?.w} fontSize={layout[`sf${mi}_1`]?.fontSize} color={layout[`sf${mi}_1`]?.color} effectStyle={textEffectStyle(layout[`sf${mi}_1`], '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>,
+          ...renderBracketSlot(`sf${mi}_0`, tA, m.s1, w === 1, w === 1, showScore),
+          ...renderBracketSlot(`sf${mi}_1`, tB, m.s2, w === 0, w === 0, showScore),
         ];
       })}
 
-      <Draggable id="fin_0"><TeamSlot name={fin0} score={final?.s1} isWin={finalW===0} isLose={finalW===1} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_0?.w} fontSize={layout.fin_0?.fontSize} color={layout.fin_0?.color} effectStyle={textEffectStyle(layout.fin_0, '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>
-      <Draggable id="fin_1"><TeamSlot name={fin1} score={final?.s2} isWin={finalW===1} isLose={finalW===0} showScore={(final?.s1||0)>0||(final?.s2||0)>0} width={layout.fin_1?.w} fontSize={layout.fin_1?.fontSize} color={layout.fin_1?.color} effectStyle={textEffectStyle(layout.fin_1, '0 2px 8px rgba(0,0,0,0.8)')} /></Draggable>
+      {renderBracketSlot('fin_0', fin0, final?.s1, finalW === 1, finalW === 1, (final?.s1 || 0) > 0 || (final?.s2 || 0) > 0)}
+      {renderBracketSlot('fin_1', fin1, final?.s2, finalW === 0, finalW === 0, (final?.s1 || 0) > 0 || (final?.s2 || 0) > 0)}
 
       <Draggable id="champion"><ChampionBadge name={champion} width={layout.champion?.w} fontSize={layout.champion?.fontSize} color={layout.champion?.color} effectStyle={textEffectStyle(layout.champion, '0 2px 12px rgba(0,0,0,0.9)')} /></Draggable>
     </div>
@@ -3538,9 +3578,10 @@ function BracketViewer({ onBack }) {
     {editMode && selectedId && isBracketTextEl(selectedId) && layout[selectedId]?.visible && (() => {
       const el = layout[selectedId];
       const w = el.w;
+      const isScore = /_score$/.test(selectedId);
       const autoSize = selectedId === 'title' ? Math.max(18, Math.min(54, (w || 520) / 10))
         : selectedId === 'champion' ? Math.max(14, Math.min(24, (w || 200) / 9))
-        : Math.max(13, Math.min(20, (w || 250) / 13));
+        : isScore ? 20 : Math.max(13, Math.min(20, (w || 190) / 11));
       const autoColor = selectedId === 'title' ? '#facc15' : '#ffffff';
       return (
         <StageStylePanel label={bracketElLabel(selectedId)} el={el} autoSize={autoSize} autoColor={autoColor}
