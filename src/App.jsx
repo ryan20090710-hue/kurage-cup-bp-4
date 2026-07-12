@@ -3258,29 +3258,35 @@ const DEFAULT_LAYOUT = {
   champion:{ x: 83, y: 44, w: 200, visible: true },
 };
 
-function TeamSlot({ name, score, isWin, isLose, showScore, width, fontSize, color, effectStyle }) {
-  const w = width || 250;
-  const fs = fontSize ?? Math.max(13, Math.min(20, w / 13));
+function BracketTeamName({ name, isLose, fontSize, color, effectStyle }) {
+  const fs = fontSize ?? 18;
   return (
     <div style={{
-      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+      width: '100%',
       padding: `${fs * 0.2}px 0`,
     }}>
       <span style={{
-        fontWeight: 800, fontSize: fs, flex: 1,
+        display: 'block', fontWeight: 800, fontSize: fs,
         color: color || (isLose ? 'rgba(255,255,255,0.5)' : '#fff'),
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         ...(effectStyle || { textShadow: '0 2px 8px rgba(0,0,0,0.8)' }),
         transition: 'color 0.4s',
       }}>{name || '—'}</span>
-      {showScore && (
-        <span style={{
-          fontWeight: 900, fontSize: fs + 2, flexShrink: 0,
-          color: color || (isLose ? 'rgba(255,255,255,0.5)' : '#fff'),
-          ...(effectStyle || { textShadow: '0 2px 8px rgba(0,0,0,0.8)' }),
-        }}>{score ?? 0}</span>
-      )}
+    </div>
+  );
+}
+
+function BracketScore({ score, showScore, fontSize, color, effectStyle, isLose }) {
+  if (!showScore) return null;
+  const fs = fontSize ?? 20;
+  return (
+    <div style={{ width: '100%', padding: `${fs * 0.2}px 0` }}>
+      <span style={{
+        display: 'block', fontWeight: 900, fontSize: fs,
+        color: color || (isLose ? 'rgba(255,255,255,0.5)' : '#fff'),
+        ...(effectStyle || { textShadow: '0 2px 8px rgba(0,0,0,0.8)' }),
+      }}>{score ?? 0}</span>
     </div>
   );
 }
@@ -3305,14 +3311,17 @@ function ChampionBadge({ name, width, fontSize, color, effectStyle }) {
 
 // 對戰表畫面可調大小/顏色的文字元素
 function isBracketTextEl(id) {
-  return id === 'title' || id === 'champion' || /^(qf|sf)\d_[01]$/.test(id) || /^fin_[01]$/.test(id);
+  return id === 'title' || id === 'champion' || /^(qf|sf)\d_[01]_(name|score)$/.test(id) || /^fin_[01]_(name|score)$/.test(id);
 }
 function bracketElLabel(id) {
   if (id === 'title') return '標題';
   if (id === 'champion') return '冠軍';
-  let m = id.match(/^qf(\d)_([01])$/); if (m) return `八強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}`;
-  m = id.match(/^sf(\d)_([01])$/); if (m) return `四強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}`;
-  m = id.match(/^fin_([01])$/); if (m) return `冠軍賽 ${m[1] === '0' ? '上' : '下'}`;
+  let m = id.match(/^qf(\d)_([01])_(name|score)$/);
+  if (m) return `八強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}${m[3] === 'name' ? '隊名' : '比分'}`;
+  m = id.match(/^sf(\d)_([01])_(name|score)$/);
+  if (m) return `四強 第${Number(m[1]) + 1}場 ${m[2] === '0' ? '上' : '下'}${m[3] === 'name' ? '隊名' : '比分'}`;
+  m = id.match(/^fin_([01])_(name|score)$/);
+  if (m) return `冠軍賽 ${m[1] === '0' ? '上' : '下'}${m[2] === 'name' ? '隊名' : '比分'}`;
   return id;
 }
 
