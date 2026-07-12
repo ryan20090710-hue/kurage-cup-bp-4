@@ -1330,6 +1330,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   const [coinStage, setCoinStage] = useState('spinning');
   const draftStateRef = useRef(null);
   const viewerBaseRef = useRef(DEFAULT_STATE);   // 觀眾視角現有設定（標題/背景/隊名/選手名）
+  const [viewerBaseLoaded, setViewerBaseLoaded] = useState(false); // RTDB 基底已載入，鏡像才可寫
   const lastMirrorRef = useRef('');              // 去重：上次鏡像寫入的內容
   const idleTimerRef = useRef(null);
   const banAudioRef  = useRef(null);
@@ -1422,13 +1423,18 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
   // ── 保留觀眾視角現有設定（標題/背景/隊名/選手名），鏡像時只覆寫 brawler ──
   useEffect(() => {
     const r = ref(realtimeDb, 'brawl_bp_match_current');
-    const unsub = onValue(r, snap => { if (snap.exists()) viewerBaseRef.current = snap.val(); });
+    const unsub = onValue(r, snap => {
+      if (snap.exists()) viewerBaseRef.current = snap.val();
+      setViewerBaseLoaded(true);
+    });
     return () => unsub();
   }, []);
 
   // ── 即時鏡像：把多人房 draft 結果同步到 OBS 觀眾視角（brawl_bp_match_current）──
   useEffect(() => {
     if (!draftState) return;
+    // 基底尚未從 RTDB 載回前不可寫，否則會用 DEFAULT_STATE 蓋掉操作者設定的底圖/標題
+    if (!viewerBaseLoaded) return;
     // 單一寫入者選舉：避免多名觀眾/雙方同時重複寫；藍方在則藍方寫，否則紅方寫
     const p = draftState.players || {};
     const isWriter = myRole === 'blue' || (myRole === 'red' && !p.blue);
@@ -1439,7 +1445,7 @@ function MultiplayerBPRoom({ onBack, themeTokens = THEME_TOKENS.dark }) {
     if (json === lastMirrorRef.current) return;   // 去重，避免無謂寫入
     lastMirrorRef.current = json;
     set(ref(realtimeDb, 'brawl_bp_match_current'), next).catch(() => {});
-  }, [draftState, myRole]);
+  }, [draftState, myRole, viewerBaseLoaded]);
 
   useEffect(() => {
     if (myRole !== 'blue' && myRole !== 'red') {
