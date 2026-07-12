@@ -139,7 +139,7 @@ const RARITY_BG = {
   'epic': 'bg-gradient-to-br from-fuchsia-400 to-purple-600 text-white',
   'mythic': 'bg-gradient-to-br from-red-500 to-rose-700 text-white',
   'legendary': 'bg-gradient-to-br from-yellow-300 to-amber-500 text-slate-900',
-  'ultra_legendary': 'bg-gradient-to-br from-violet-600 via-fuchsia-500 to-rose-500 text-white shadow-[inset_0_0_10px_rgba(255,255,255,0.4)] relative overflow-hidden ring-1 ring-fuchsia-300',
+  'ultra_legendary': 'bg-gradient-to-br from-violet-600 via-fuchsia-500 to-rose-500 text-white shadow-[inset_0_0_10px_rgba(255,255,255,0.4)] ring-1 ring-fuchsia-300',
 };
 
 const THEME_STORAGE_KEY = 'kurage-theme';
@@ -5489,7 +5489,9 @@ const LIVE_DEFAULT = {
   team2:    { name: 'TEAM 2', score: 0, subScore: 0, bans: ['', '', ''] },
   maxWins:  3,
   subMaxWins: 2,  // BO3 = 先到 2 小局
+  bgType:   'transparent',
   bgColor:  '#ffffff',
+  bgImage:  '',
   blueColor:'#1e88ff',
   redColor: '#ff3838',
   textColor:'#1e293b',
@@ -6355,6 +6357,39 @@ function LiveScoreOperator({ onBack }) {
           </button>
         </div>
 
+        {/* 畫面底圖 */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+          <h2 className="font-bold text-base mb-4 border-b pb-2">🖼️ 畫面底圖</h2>
+          <div className="flex gap-3 mb-3">
+            {[['color', '純色'], ['image', '圖片'], ['transparent', '透明']].map(([value, label]) => (
+              <button key={value} onClick={() => update('bgType', value)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold border transition ${(state.bgType ?? 'transparent') === value ? 'bg-yellow-400 text-slate-900 border-yellow-400' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {(state.bgType ?? 'transparent') === 'color' && (
+            <div className="flex gap-2 items-center">
+              <input type="color" value={state.bgColor?.startsWith('#') ? state.bgColor : '#0a0c14'} onChange={e => update('bgColor', e.target.value)}
+                className="w-10 h-9 rounded cursor-pointer border-0 p-0.5 shrink-0" />
+              <input type="text" value={state.bgColor || ''} onChange={e => update('bgColor', e.target.value)}
+                className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" placeholder="#0a0c14" />
+            </div>
+          )}
+          {(state.bgType ?? 'transparent') === 'image' && (
+            <div className="flex gap-2 items-center">
+              {state.bgImage && (
+                <img src={state.bgImage} alt="bg" className="w-12 h-12 object-cover rounded-lg bg-slate-100 shrink-0" onError={e => e.target.style.display = 'none'} />
+              )}
+              <input type="text" value={state.bgImage || ''} onChange={e => update('bgImage', e.target.value)}
+                placeholder="貼上圖片網址 https://..." className="flex-1 p-2 border rounded-lg outline-none text-sm font-mono focus:border-yellow-400" />
+              {state.bgImage && (
+                <button onClick={() => update('bgImage', '')} className="px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-500 shrink-0">清除</button>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* 主題色 */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
           <h2 className="font-bold text-base mb-4 border-b pb-2">🎨 主題色</h2>
@@ -6492,7 +6527,7 @@ function BrawlerPickerModal({ onSelect, onClose }) {
   );
 }
 
-// ── 展示畫面（OBS 用，背景透明） ─────────────────────────────────────────────
+// ── 展示畫面（OBS 用，可自訂底圖） ────────────────────────────────────────────
 // 即時比分畫面可調大小/顏色的文字元素
 function isLiveTextEl(id) { return ['t1_name', 't2_name', 't1_score', 't2_score'].includes(id); }
 function liveElLabel(id) {
@@ -6510,11 +6545,10 @@ function LiveScoreViewer({ onBack }) {
   const resizeStartRef = useRef({ mx: 0, w: 0 });
   const layoutRef = useRef(layout);
   const containerRef = useRef(null);
-  const { scale: stageScale, h: stageH } = useStageScale();
+  const { team1, team2, maxWins = 3, bgType = 'transparent', bgColor, bgImage, blueColor, redColor, textColor, scoreTextColor, visible } = state;
+  const { scale: stageScale, h: stageH } = useStageScale(bgType === 'image' ? bgImage : '');
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => { if (!editMode) setSelectedId(null); }, [editMode]);
-
-  const { team1, team2, maxWins = 3, bgColor, blueColor, redColor, textColor, scoreTextColor, visible } = state;
 
   useEffect(() => {
     const dbRef = ref(liveScoreDb, 'live_layout');
@@ -6638,10 +6672,15 @@ function LiveScoreViewer({ onBack }) {
 
   function fs(w, base, min = 12, max = 80) { return Math.max(min, Math.min(max, w / base)); }
 
+  const screenBg = bgType === 'color' ? (bgColor || '#0a0c14') : 'transparent';
+  const screenBgStyle = bgType === 'image' && bgImage
+    ? { background: `#0a0c14 center/cover no-repeat url("${bgImage}")` }
+    : { background: screenBg };
+
   return (
     <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
     <div ref={containerRef}
-      style={{ width:STAGE_W, height:stageH, flex:'0 0 auto', overflow:'hidden', background:'transparent', position:'relative', fontFamily:'sans-serif', transform:`scale(${stageScale})`, transformOrigin:'center center' }}
+      style={{ width:STAGE_W, height:stageH, flex:'0 0 auto', overflow:'hidden', position:'relative', fontFamily:'sans-serif', transform:`scale(${stageScale})`, transformOrigin:'center center', ...screenBgStyle }}
       onMouseMove={onMove} onMouseUp={onUp} onTouchMove={onMove} onTouchEnd={onUp} translate="no">
 
       <button onClick={onBack} className="kurage-floating-control" style={{
