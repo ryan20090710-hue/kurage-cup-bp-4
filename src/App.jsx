@@ -2702,9 +2702,10 @@ function StageStylePanel({ label, el, autoSize, autoColor, sizeMin = 8, sizeMax 
   );
 }
 
-// 圖卡邊框浮動編輯面板：粗細 + 顏色，套用到所有圖卡（存於 layout.card_style）
+// 圖卡邊框浮動編輯面板：粗細 + 圓角 + 顏色，套用到所有圖卡（存於 layout.card_style）
 function CardBorderPanel({ style, onPatch, onClose }) {
   const curW = Math.round(style?.borderWidth ?? 4);
+  const curR = Math.round(style?.radius ?? 10);
   const pickerColor = (style?.borderColor && style.borderColor.startsWith('#')) ? style.borderColor : '#000000';
   return (
     <div style={{
@@ -2723,6 +2724,12 @@ function CardBorderPanel({ style, onPatch, onClose }) {
       <input type="range" min={0} max={20} value={curW}
         onChange={e => onPatch({ borderWidth: Number(e.target.value) })}
         style={{ width: '100%', accentColor: '#facc15' }} />
+      <div style={{ fontSize: 11, opacity: 0.75, marginTop: 10, marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
+        <span>圓角</span><span style={{ fontWeight: 700 }}>{curR === 0 ? '直角' : `${curR}px`}</span>
+      </div>
+      <input type="range" min={0} max={40} value={curR}
+        onChange={e => onPatch({ radius: Number(e.target.value) })}
+        style={{ width: '100%', accentColor: '#facc15' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
         <span style={{ fontSize: 11, opacity: 0.75 }}>顏色</span>
         <input type="color" value={pickerColor}
@@ -2732,8 +2739,8 @@ function CardBorderPanel({ style, onPatch, onClose }) {
           onChange={e => onPatch({ borderColor: e.target.value })}
           style={{ width: 88, fontSize: 11, padding: '5px 7px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontFamily: 'monospace' }} />
       </div>
-      <button onClick={() => onPatch({ borderWidth: null, borderColor: null })}
-        style={{ marginTop: 14, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復預設（4px 黑）</button>
+      <button onClick={() => onPatch({ borderWidth: null, borderColor: null, radius: null })}
+        style={{ marginTop: 14, width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, cursor: 'pointer' }}>↺ 恢復預設（4px 黑・圓角 10）</button>
     </div>
   );
 }
@@ -2741,14 +2748,14 @@ function CardBorderPanel({ style, onPatch, onClose }) {
 // 圖卡黑框覆蓋層：疊在圖片最上方，不縮圖、不受灰階濾鏡影響
 function CardBorderOverlay({ border }) {
   if (!border || !(border.width > 0)) return null;
-  return <div style={{ position: 'absolute', inset: 0, border: `${border.width}px solid ${border.color || '#000000'}`, pointerEvents: 'none' }} />;
+  return <div style={{ position: 'absolute', inset: 0, border: `${border.width}px solid ${border.color || '#000000'}`, borderRadius: border.radius || 0, pointerEvents: 'none' }} />;
 }
 
 function ViewerBanSlot({ ban, size, border }) {
   const s = size || 75;
   const h = s * 1602 / 2400;
   return (
-    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden', borderRadius: border?.radius || 0 }}>
       {ban.brawler ? (
         <>
           <img src={ban.brawler.imageUrl} alt={ban.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(1)', opacity: 0.9, display: 'block' }} />
@@ -2764,7 +2771,7 @@ function ViewerPickSlot({ pick, size, border }) {
   const s = size || 120;
   const h = s * 1602 / 2400;
   return (
-    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: s, height: h, position: 'relative', overflow: 'hidden', borderRadius: border?.radius || 0 }}>
       {pick.brawler ? (
         <>
           <img src={pick.brawler.imageUrl} alt={pick.brawler.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -2804,7 +2811,7 @@ const DEFAULT_BP_LAYOUT = {
   t2_p1: { x: 74, y: 64, w: 120, visible: true },
   t2_p2: { x: 74, y: 84, w: 120, visible: true },
   // 保留鍵：所有圖卡共用的邊框設定（非可拖曳元素）
-  card_style: { borderWidth: 4, borderColor: '#000000' },
+  card_style: { borderWidth: 4, borderColor: '#000000', radius: 10 },
 };
 
 // BP 畫面可調大小/顏色的文字元素
@@ -2980,7 +2987,7 @@ function ViewerView({ onBack }) {
   const gbansLblFs = Math.max(12, Math.min(32, (layout.gbans_lbl?.w || 200) / 7));
   const gb1 = state.globalBans?.team1 || [];
   const gb2 = state.globalBans?.team2 || [];
-  const cardBorder = { width: layout.card_style?.borderWidth ?? 4, color: layout.card_style?.borderColor || '#000000' };
+  const cardBorder = { width: layout.card_style?.borderWidth ?? 4, color: layout.card_style?.borderColor || '#000000', radius: layout.card_style?.radius ?? 10 };
   const { scale: stageScale, h: stageH } = useStageScale(state.background);
 
   return (
